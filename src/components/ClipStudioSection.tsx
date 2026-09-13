@@ -241,6 +241,8 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
             playsinline: 1,
             enablejsapi: 1,
             iv_load_policy: 3,
+            cc_load_policy: 0,
+            autohide: 1,
             start: startSec,
             origin: window.location.origin,
           },
@@ -250,6 +252,10 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
               try {
                 event.target.mute();
                 setIsMuted(true);
+                if (typeof event.target.unloadModule === 'function') {
+                  event.target.unloadModule('captions');
+                  event.target.unloadModule('cc');
+                }
                 event.target.seekTo(clipStart, true);
                 setCurrentTime(clipStart);
               } catch (e) {}
@@ -2511,7 +2517,14 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                           }}
                         />
                       ) : (
-                        <div id="studio-preview-yt-container" className="studio-yt-embed-slot">
+                        <div
+                          id="studio-preview-yt-container"
+                          className="studio-yt-embed-slot"
+                          style={{
+                            opacity: playerReady ? 1 : 0,
+                            transition: 'opacity 0.25s ease',
+                          }}
+                        >
                           <div id="studio-yt-iframe-slot"></div>
                         </div>
                       )}

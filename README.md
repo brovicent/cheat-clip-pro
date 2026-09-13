@@ -4,7 +4,7 @@
 
 ---
 
-## ⚡ Quick Start (Setup in 3 Steps)
+## ⚡ Quick Start (Setup in 4 Steps)
 
 ### Step 1: Requirements
 1. **[Git](https://git-scm.com/)** — If you don't have Git... how did you even get this project? Download ZIP gang? 📦 No judgment, but grab it so you can get updates (`winget install Git.Git` on Windows, `brew install git` on Mac, or from [git-scm.com](https://git-scm.com/)).
@@ -23,19 +23,39 @@
      ```
      *(If you don't have Homebrew installed on Mac, install it first from [brew.sh](https://brew.sh))*
 
-### Step 2: Install
-Open your terminal inside this folder and run:
+### Step 2: Clone the Repository
+Open your terminal and run:
+```bash
+git clone https://github.com/galihjuansaputra/cheat-clip-pro.git
+cd cheat-clip-pro
+```
+
+### Step 3: Install Dependencies
+Inside the project folder, run:
 ```bash
 npm install
 python -m pip install -r backend/requirements.txt
 ```
 *(On Mac, use `python3 -m pip install -r backend/requirements.txt`)*
 
-### Step 3: Run the App
+### Step 4: Run the App
 ```bash
 npm run dev
 ```
 Open **`http://localhost:5173`** in your web browser!
+
+---
+
+## 🔄 Updating to the Latest Version
+
+To update your copy of Cheat Clip PRO with the latest features and fixes, open your terminal inside the `cheat-clip-pro` folder and run:
+
+```bash
+git pull
+npm install
+python -m pip install -r backend/requirements.txt
+```
+*(On Mac, use `python3 -m pip install -r backend/requirements.txt`)*
 
 ---
 

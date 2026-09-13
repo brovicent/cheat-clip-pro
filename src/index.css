@@ -3119,42 +3119,63 @@ label[for="manual-subtitle-file"]:hover {
 .studio-yt-embed-slot iframe {
   border: none;
   pointer-events: none;
+  user-select: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: none;
 }
 
-/* In 9:16 full-bleed crop mode, center crop the 16:9 video */
+/* 
+ * Hide all YouTube player UI (top title, channel avatar, watch later, share, and bottom watermark/logo)
+ * by overscaling the 16:9 iframe vertically inside overflow:hidden.
+ * The top (~75px) and bottom (~70px) YouTube UI bars are pushed completely outside the visible viewport.
+ */
+
+/* In 9:16 full-bleed vertical mode (container: 320x569) */
 .aspect-916 .studio-yt-embed-slot iframe {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 1012px;
-  height: 569px;
-  transform: translate(-50%, -50%);
-  max-width: none;
+  width: 1352px;
+  height: 760px;
 }
 
+/* In 1:1 square crop mode (container: 320x320) */
 .aspect-11 .studio-yt-embed-slot iframe {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 569px;
-  height: 320px;
-  transform: translate(-50%, -50%);
-  max-width: none;
+  width: 836px;
+  height: 470px;
 }
 
+/* In 4:3 standard crop mode (container: 320x240) */
 .aspect-43 .studio-yt-embed-slot iframe {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 427px;
-  height: 240px;
-  transform: translate(-50%, -50%);
-  max-width: none;
+  width: 676px;
+  height: 380px;
 }
 
+/* In 16:9 widescreen mode (container: 320x180) */
 .aspect-169 .studio-yt-embed-slot iframe {
-  width: 320px;
-  height: 180px;
+  width: 552px;
+  height: 310px;
+}
+
+/* Split-mode overrides for bottom feed */
+.wireframe-content-box.split-mode.aspect-916 .studio-yt-embed-slot iframe {
+  width: 729px;
+  height: 410px;
+}
+
+.wireframe-content-box.split-mode.aspect-11 .studio-yt-embed-slot iframe {
+  width: 712px;
+  height: 400px;
+}
+
+.wireframe-content-box.split-mode.aspect-43 .studio-yt-embed-slot iframe {
+  width: 658px;
+  height: 370px;
+}
+
+.wireframe-content-box.split-mode.aspect-169 .studio-yt-embed-slot iframe {
+  width: 552px;
+  height: 310px;
 }
 
 .studio-preview-click-overlay {
