@@ -228,30 +228,46 @@ def download_clip_segment(
     if not clean_url.startswith("http"):
         clean_url = f"https://www.youtube.com/watch?v={clean_url}"
 
+    clip_duration = max(1.0, end_time - start_time)
     t_start_fmt = format_section_time(start_time)
     t_end_fmt = format_section_time(end_time)
     base_cmd = get_yt_dlp_base_cmd()
 
-    # Method 1: yt-dlp --download-sections with robust HD format selection
+    # Dynamic timeout: Minimum 300s (5m), plus 5s per second of clip duration.
+    # Prevents killing slow HLS/DASH downloads on 60-90s clips.
+    timeout_sec = max(300, int(clip_duration * 5) + 120)
+
+    # Method 1: yt-dlp --download-sections with multi-fragment acceleration & retries
     cmd = [
         *base_cmd,
         "--download-sections", f"*{t_start_fmt}-{t_end_fmt}",
         "-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/bestvideo+bestaudio/best",
+        "-N", "4",
+        "--fragment-retries", "10",
+        "--retries", "10",
+        "--file-access-retries", "5",
         "-o", str(output_path),
         "--merge-output-format", "mp4",
         "--no-warnings",
         clean_url
     ]
 
-    logger.info(f"Downloading HD section {t_start_fmt} -> {t_end_fmt} for {clean_url}")
-    res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-
-    if output_path.exists() and output_path.stat().st_size > 10000:
-        logger.info(f"Successfully downloaded section: {output_path} ({output_path.stat().st_size} bytes)")
-        return str(output_path)
+    logger.info(f"Downloading HD section ({clip_duration:.1f}s) {t_start_fmt} -> {t_end_fmt} for {clean_url} (timeout: {timeout_sec}s)")
+    err_snippet = "unknown"
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec)
+        if output_path.exists() and output_path.stat().st_size > 10000:
+            logger.info(f"Successfully downloaded section: {output_path} ({output_path.stat().st_size} bytes)")
+            return str(output_path)
+        err_snippet = res.stderr[:300] if (res and res.stderr) else "empty output or invalid file"
+    except subprocess.TimeoutExpired:
+        logger.warning(f"yt-dlp download-sections timed out after {timeout_sec}s for {clean_url}. Triggering fallback...")
+        err_snippet = f"download-sections timed out after {timeout_sec}s"
+    except Exception as e:
+        logger.warning(f"yt-dlp download-sections failed ({e}). Triggering fallback...")
+        err_snippet = str(e)
 
     # Method 2: Fallback - Extract direct stream URLs with yt-dlp and slice using FFmpeg
-    err_snippet = res.stderr[:200] if res.stderr else "empty output"
     logger.info(f"Direct section download fallback ({err_snippet}), trying stream URL trimming...")
     try:
         url_cmd = [
@@ -260,35 +276,61 @@ def download_clip_segment(
             "-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/bestvideo+bestaudio/best",
             clean_url
         ]
-        url_res = subprocess.run(url_cmd, capture_output=True, text=True, timeout=35)
+        url_res = subprocess.run(url_cmd, capture_output=True, text=True, timeout=45)
         if url_res.returncode == 0 and url_res.stdout.strip():
             urls = url_res.stdout.strip().split("\n")
             video_stream = urls[0]
             audio_stream = urls[1] if len(urls) > 1 else urls[0]
 
-            duration = max(1.0, end_time - start_time)
+            trim_timeout = max(120, int(clip_duration * 3) + 30)
             trim_cmd = [
                 "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                 "-ss", str(start_time),
                 "-i", video_stream,
                 "-ss", str(start_time),
                 "-i", audio_stream,
-                "-t", str(duration),
+                "-t", str(clip_duration),
                 "-map", "0:v:0", "-map", "1:a:0?",
                 "-c:v", "copy", "-c:a", "aac",
                 str(output_path)
             ]
-            subprocess.run(trim_cmd, capture_output=True, timeout=60)
+            subprocess.run(trim_cmd, capture_output=True, timeout=trim_timeout)
             if output_path.exists() and output_path.stat().st_size > 10000:
+                logger.info(f"Successfully trimmed stream URLs with FFmpeg: {output_path} ({output_path.stat().st_size} bytes)")
                 return str(output_path)
     except Exception as e:
         logger.error(f"Fallback stream trimming failed: {e}")
 
-    err_msg = res.stderr or "Format unavailable"
-    err_lower = err_msg.lower()
+    # Method 3: Fallback - Download at 720p (vastly lower bandwidth, skips SABR/1080p throttling)
+    logger.info(f"Method 3: Attempting fast 720p fallback section download for {clean_url}...")
+    try:
+        cmd_720p = [
+            *base_cmd,
+            "--download-sections", f"*{t_start_fmt}-{t_end_fmt}",
+            "-f", "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
+            "-N", "4",
+            "--fragment-retries", "10",
+            "--retries", "10",
+            "-o", str(output_path),
+            "--merge-output-format", "mp4",
+            "--no-warnings",
+            clean_url
+        ]
+        timeout_720p = max(180, int(clip_duration * 3) + 60)
+        res_720p = subprocess.run(cmd_720p, capture_output=True, text=True, timeout=timeout_720p)
+        if output_path.exists() and output_path.stat().st_size > 10000:
+            logger.info(f"Successfully downloaded 720p fallback section: {output_path} ({output_path.stat().st_size} bytes)")
+            return str(output_path)
+        if res_720p and res_720p.stderr:
+            err_snippet = res_720p.stderr[:300]
+    except Exception as e:
+        logger.warning(f"720p fallback failed: {e}")
+        err_snippet = str(e)
+
+    err_lower = err_snippet.lower()
     if "confirm you're not a bot" in err_lower or "sign in" in err_lower or "login" in err_lower:
         raise RuntimeError("YouTube blocked video download (Bot verification). Please import/save your YouTube cookies using the 🍪 Cookies Manager button in the top navbar.")
-    raise RuntimeError(f"Failed to download video clip segment from YouTube: {err_msg}")
+    raise RuntimeError(f"Failed to download video clip segment from YouTube ({err_snippet}). Please try again or check your network/cookies.")
 
 
 def download_full_raw_video(video_url: str, output_path: str, progress_callback=None) -> str:
@@ -871,7 +913,7 @@ def detect_speaker_face_box(source_path: str) -> Dict[str, Any]:
                 return default_res
             h, w = frame.shape[:2]
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
+            faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(28, 28))
             if len(faces) > 0:
                 largest = max(faces, key=lambda f: f[2] * f[3])
                 fx, fy, fw, fh = largest
@@ -893,7 +935,8 @@ def detect_speaker_face_box(source_path: str) -> Dict[str, Any]:
 
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        step = max(1, int(fps * 0.75))  # Sample every ~0.75s
+        # Sample across the entire clip duration rather than only the first ~18 seconds
+        step = max(1, total_frames // 25) if total_frames > 25 else max(1, int(fps * 0.75))
 
         detections = []
         frame_idx = 0
@@ -902,11 +945,14 @@ def detect_speaker_face_box(source_path: str) -> Dict[str, Any]:
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, frame = cap.read()
             if not ret:
-                break
+                # Seek may miss non-keyframes; continue to next frame instead of aborting the loop
+                frame_idx += step
+                checked += 1
+                continue
             checked += 1
             h, w = frame.shape[:2]
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
+            faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(28, 28))
             if len(faces) > 0:
                 largest = max(faces, key=lambda f: f[2] * f[3])
                 fx, fy, fw, fh = largest
@@ -1477,7 +1523,7 @@ def extract_clip_frame(video_url: str, video_id: str, timestamp: float = 0.0) ->
             "--no-warnings",
             clean_url
         ]
-        subprocess.run(slice_cmd, capture_output=True, text=True, timeout=8)
+        subprocess.run(slice_cmd, capture_output=True, text=True, timeout=20)
         if temp_slice.exists() and temp_slice.stat().st_size > 1000:
             ff_cmd = [
                 "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
