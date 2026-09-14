@@ -1539,17 +1539,19 @@ async def process_batch_rendering(batch_id: str, request: RenderBatchRequest):
             logger.error(f"Error rendering clip {idx} in batch {batch_id}: {e}")
             clip_status["status"] = "error"
             clip_status["error_message"] = str(e)
+            clip_status["error"] = str(e)
 
         batch["current_clip_index"] = idx + 1
 
     # Generate ZIP bundle for the batch with title-based filenames and duplicate handling
     try:
-        zip_filename = f"cheat_clip_pro_{batch_id}.zip"
-        zip_path = EXPORTS_DIR / zip_filename
-        title_counts: Dict[str, int] = {}
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-            for c in batch["clips"]:
-                if c.get("status") == "completed" and c.get("download_url"):
+        completed_clips = [c for c in batch["clips"] if c.get("status") == "completed" and c.get("download_url")]
+        if completed_clips:
+            zip_filename = f"cheat_clip_pro_{batch_id}.zip"
+            zip_path = EXPORTS_DIR / zip_filename
+            title_counts: Dict[str, int] = {}
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                for c in completed_clips:
                     fname = c["download_url"].split("/")[-1]
                     fpath = EXPORTS_DIR / fname
                     if fpath.exists():
@@ -1559,11 +1561,24 @@ async def process_batch_rendering(batch_id: str, request: RenderBatchRequest):
                         title_counts[clean_title] = count + 1
                         arc_name = f"{clean_title}.mp4" if count == 0 else f"{clean_title} ({count}).mp4"
                         zipf.write(fpath, arcname=arc_name)
-        batch["zip_url"] = f"/api/download-batch-zip/{batch_id}"
+            batch["zip_url"] = f"/api/download-batch-zip/{batch_id}"
+        else:
+            batch["zip_url"] = None
     except Exception as e:
         logger.warning(f"Failed to create batch zip: {e}")
 
-    batch["overall_status"] = "completed"
+    # Determine overall status and error messaging
+    failed_clips = [c for c in batch["clips"] if c.get("status") == "error"]
+    completed_clips = [c for c in batch["clips"] if c.get("status") == "completed"]
+
+    if len(failed_clips) == len(batch["clips"]):
+        batch["overall_status"] = "error"
+        batch["error_message"] = f"All {len(batch['clips'])} clip(s) failed to render. Please review the error details."
+    elif len(failed_clips) > 0:
+        batch["overall_status"] = "completed"
+        batch["warning_message"] = f"{len(failed_clips)} of {len(batch['clips'])} clips encountered errors."
+    else:
+        batch["overall_status"] = "completed"
 
 
 @app.post("/api/render-batch")

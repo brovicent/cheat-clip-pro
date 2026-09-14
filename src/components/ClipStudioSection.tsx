@@ -31,6 +31,111 @@ interface ClipStudioSectionProps {
   onDismissProgress?: () => void;
 }
 
+function getFriendlyErrorMessage(rawMsg: string): string {
+  if (!rawMsg) return 'Rendering failed unexpectedly.';
+  const lower = rawMsg.toLowerCase();
+  if (lower.includes("bot verification") || lower.includes("sign in") || lower.includes("confirm you're not a bot")) {
+    return 'YouTube requires cookies verification. Click the 🍪 Cookies Manager button in the top navbar to save your YouTube cookies.';
+  }
+  if (lower.includes("timed out") || lower.includes("timeout")) {
+    return 'Video download timed out. YouTube took too long to stream data. Please try again or check your internet connection.';
+  }
+  if (lower.includes("hardware encoder") || (lower.includes("ffmpeg") && (lower.includes("nvenc") || lower.includes("amf") || lower.includes("qsv")))) {
+    return 'GPU hardware encoder failed. Please switch Video Encoder to "Universal CPU (libx264)" in Studio Settings.';
+  }
+  if (lower.includes("no space left") || lower.includes("disk full") || lower.includes("out of disk")) {
+    return 'Disk storage is full. Please click "🧹 Clear Temp" to free up storage space.';
+  }
+  if (lower.includes("whisper") || lower.includes("transcribe")) {
+    return 'Word transcription failed. Check your audio track or switch subtitle style to none.';
+  }
+  if (lower.includes("ffmpeg") || lower.includes("filter_complex")) {
+    return 'FFmpeg video rendering failed during composition. Check error details below.';
+  }
+  return rawMsg.length > 140 ? rawMsg.slice(0, 140) + '...' : rawMsg;
+}
+
+const ClipRenderErrorBox: React.FC<{ errorMessage: string; t: any }> = ({ errorMessage, t }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(errorMessage);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const friendly = getFriendlyErrorMessage(errorMessage);
+
+  return (
+    <div
+      style={{
+        marginTop: '0.4rem',
+        padding: '0.55rem 0.75rem',
+        background: 'rgba(239, 68, 68, 0.08)',
+        border: '1px solid rgba(239, 68, 68, 0.28)',
+        borderRadius: '7px',
+        fontSize: '0.72rem',
+        color: '#fca5a5',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.35rem',
+        lineHeight: 1.4,
+        wordBreak: 'break-word',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.6rem' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.4rem' }}>
+          <span style={{ fontSize: '0.9rem', flexShrink: 0 }}>⚠️</span>
+          <span style={{ fontWeight: 600, color: '#fca5a5' }}>{friendly}</span>
+        </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          style={{
+            background: copied ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+            border: `1px solid ${copied ? 'rgba(16, 185, 129, 0.4)' : 'rgba(255, 255, 255, 0.15)'}`,
+            borderRadius: '4px',
+            color: copied ? '#34d399' : '#e2e8f0',
+            fontSize: '0.65rem',
+            padding: '2px 7px',
+            cursor: 'pointer',
+            flexShrink: 0,
+            fontWeight: 600,
+            transition: 'all 0.2s ease',
+          }}
+          title="Copy full error details"
+        >
+          {copied ? (t.studio.copiedErrorBtn || '✓ Copied!') : (t.studio.copyErrorBtn || '📋 Copy')}
+        </button>
+      </div>
+
+      <details style={{ fontSize: '0.67rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+        <summary style={{ cursor: 'pointer', color: '#cbd5e1', userSelect: 'none', fontWeight: 500 }}>
+          {t.studio.errorDetails || 'Technical Log Details'}
+        </summary>
+        <pre
+          style={{
+            margin: '0.35rem 0 0 0',
+            padding: '0.4rem 0.55rem',
+            background: 'rgba(0, 0, 0, 0.55)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            borderRadius: '4px',
+            color: '#f87171',
+            fontSize: '0.65rem',
+            fontFamily: 'Consolas, Monaco, monospace',
+            whiteSpace: 'pre-wrap',
+            maxHeight: '130px',
+            overflowY: 'auto',
+          }}
+        >
+          {errorMessage}
+        </pre>
+      </details>
+    </div>
+  );
+};
+
 export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
   videoUrl,
   videoId,
@@ -2936,7 +3041,11 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                     </div>
                     <p className="batch-subtitle">
                       {batchProgress.overall_status === 'completed'
-                        ? t.studio.allClipsRendered(batchProgress.total_clips)
+                        ? (batchProgress.clips.some(c => c.status === 'error')
+                            ? t.studio.someClipsFailed(batchProgress.clips.filter(c => c.status === 'error').length, batchProgress.total_clips)
+                            : t.studio.allClipsRendered(batchProgress.total_clips))
+                        : batchProgress.overall_status === 'error'
+                        ? (batchProgress.error_message || t.studio.allClipsFailed)
                         : t.studio.processingClip((batchProgress.current_clip_index || 0) + 1, batchProgress.total_clips)}
                     </p>
                   </div>
@@ -2967,7 +3076,7 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                       </a>
                     )}
 
-                    {batchProgress.overall_status === 'completed' && onDismissProgress && (
+                    {(batchProgress.overall_status === 'completed' || batchProgress.overall_status === 'error') && onDismissProgress && (
                       <button
                         type="button"
                         className="studio-close-btn"
@@ -2981,6 +3090,26 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                   </div>
                 </div>
 
+                {/* Overall Batch Error Notice if all clips failed */}
+                {batchProgress.overall_status === 'error' && (
+                  <div style={{
+                    margin: '0.5rem 0 0.2rem',
+                    padding: '0.55rem 0.75rem',
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    borderRadius: '7px',
+                    color: '#fca5a5',
+                    fontSize: '0.74rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    fontWeight: 600
+                  }}>
+                    <span>❌</span>
+                    <span>{batchProgress.error_message || t.studio.allClipsFailed}</span>
+                  </div>
+                )}
+
                 {/* Overall Progress Bar */}
                 <div className="batch-overall-bar-wrap">
                   <div className="batch-overall-bar" style={{ height: '5px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
@@ -2988,7 +3117,9 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                       className="batch-overall-fill"
                       style={{
                         height: '100%',
-                        background: 'linear-gradient(90deg, #ff5e3a, #ff2a5f)',
+                        background: batchProgress.overall_status === 'error'
+                          ? '#ef4444'
+                          : 'linear-gradient(90deg, #ff5e3a, #ff2a5f)',
                         width: `${Math.round((batchProgress.clips.filter(c => c.status === 'completed').length / (batchProgress.total_clips || 1)) * 100)}%`,
                         transition: 'width 0.3s ease'
                       }}
@@ -3001,7 +3132,7 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                 </div>
 
                 {/* Render Items List */}
-                <div className="batch-render-items-list">
+                <div className="batch-render-items-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.6rem' }}>
                   {batchProgress.clips.map((clip, idx) => {
                     const cleanTitle = (clip.title || `clip_${idx + 1}`).replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${idx + 1}`;
                     let dupCount = 0;
@@ -3016,42 +3147,71 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                       ? `${clip.download_url}${clip.download_url.includes('?') ? '&' : '?'}title=${encodeURIComponent(finalClipName)}`
                       : '';
 
+                    const isError = clip.status === 'error';
+                    const rawError = clip.error_message || clip.error || '';
+
                     return (
-                      <div key={idx} className={`batch-item-row status-${clip.status}`} style={{ padding: '0.42rem 0.65rem', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', maxWidth: '62%' }}>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>#{idx + 1}</span>
-                          <span style={{ fontSize: '0.74rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{clip.title}</span>
-                        </div>
-                        <div>
-                          {clip.status === 'pending' && <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{t.studio.statusWaitingShort}</span>}
-                          {clip.status === 'downloading' && <span style={{ fontSize: '0.68rem', color: '#f59e0b' }}>{t.studio.statusSlicingShort}</span>}
-                          {clip.status === 'transcribing' && <span style={{ fontSize: '0.68rem', color: '#8b5cf6' }}>{t.studio.statusCaptionsShort}</span>}
-                          {clip.status === 'rendering' && <span style={{ fontSize: '0.68rem', color: '#3b82f6' }}>{t.studio.statusRenderingShort}</span>}
-                          {clip.status === 'completed' && (
-                            clip.download_url ? (
-                              <a
-                                href={dlUrlWithTitle}
-                                download={`${finalClipName}.mp4`}
-                                className="quick-dl-btn"
-                                title={`Download ${finalClipName}.mp4`}
+                      <div
+                        key={idx}
+                        className={`batch-item-row status-${clip.status}`}
+                        style={{
+                          padding: '0.5rem 0.75rem',
+                          borderRadius: '8px',
+                          background: isError ? 'rgba(239, 68, 68, 0.05)' : 'rgba(255,255,255,0.03)',
+                          border: isError ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(255,255,255,0.06)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.25rem',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', maxWidth: '65%' }}>
+                            <span style={{ fontSize: '0.7rem', color: isError ? '#f87171' : 'var(--text-muted)', fontWeight: 600 }}>#{idx + 1}</span>
+                            <span style={{ fontSize: '0.75rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{clip.title}</span>
+                          </div>
+                          <div>
+                            {clip.status === 'pending' && <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{t.studio.statusWaitingShort}</span>}
+                            {clip.status === 'downloading' && <span style={{ fontSize: '0.68rem', color: '#f59e0b' }}>{t.studio.statusSlicingShort}</span>}
+                            {clip.status === 'transcribing' && <span style={{ fontSize: '0.68rem', color: '#8b5cf6' }}>{t.studio.statusCaptionsShort}</span>}
+                            {clip.status === 'rendering' && <span style={{ fontSize: '0.68rem', color: '#3b82f6' }}>{t.studio.statusRenderingShort}</span>}
+                            {clip.status === 'completed' && (
+                              clip.download_url ? (
+                                <a
+                                  href={dlUrlWithTitle}
+                                  download={`${finalClipName}.mp4`}
+                                  className="quick-dl-btn"
+                                  title={`Download ${finalClipName}.mp4`}
+                                >
+                                  ⬇️ MP4
+                                </a>
+                              ) : (
+                                <span className="quick-dl-btn" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
+                                  ✓ Done
+                                </span>
+                              )
+                            )}
+                            {isError && (
+                              <span
+                                style={{
+                                  fontSize: '0.68rem',
+                                  fontWeight: 700,
+                                  color: '#f87171',
+                                  background: 'rgba(239, 68, 68, 0.18)',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                                }}
                               >
-                                ⬇️ MP4
-                              </a>
-                            ) : (
-                              <span className="quick-dl-btn" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
-                                ✓ Done
+                                ❌ {t.studio.statusFailedShort}
                               </span>
-                            )
-                          )}
-                          {clip.status === 'error' && (
-                            <span
-                              style={{ fontSize: '0.68rem', color: '#ef4444', cursor: 'help' }}
-                              title={clip.error_message || 'Rendering failed'}
-                            >
-                              {t.studio.statusFailedShort} {clip.error_message ? '⚠️' : ''}
-                            </span>
-                          )}
+                            )}
+                          </div>
                         </div>
+
+                        {/* Visible Error Box when clip fails */}
+                        {isError && rawError && (
+                          <ClipRenderErrorBox errorMessage={rawError} t={t} />
+                        )}
                       </div>
                     );
                   })}

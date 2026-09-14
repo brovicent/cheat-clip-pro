@@ -133,6 +133,7 @@ export interface RenderClipStatus {
   progress_percent: number;
   download_url?: string;
   error_message?: string;
+  error?: string;
 }
 
 export interface BatchRenderProgress {
@@ -141,5 +142,7 @@ export interface BatchRenderProgress {
   current_clip_index: number;
   overall_status: 'running' | 'completed' | 'error';
   zip_url?: string;
+  error_message?: string;
+  warning_message?: string;
   clips: RenderClipStatus[];
 }

@@ -89,27 +89,29 @@ export const BatchRenderProgressModal: React.FC<BatchRenderProgressModalProps> =
                   </div>
                 )}
                 {clip.status === 'error' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
-                    <span className="status-badge error" title={clip.error_message}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', marginTop: '2px' }}>
+                    <span className="status-badge error" title={clip.error_message || clip.error}>
                       {t.batchProgress.statusFailed}
                     </span>
-                    {clip.error_message && (
+                    {(clip.error_message || clip.error) && (
                       <span
                         style={{
                           fontSize: '0.68rem',
-                          color: '#f87171',
-                          maxWidth: '260px',
-                          lineHeight: '1.25',
+                          color: '#fca5a5',
+                          maxWidth: '320px',
+                          lineHeight: '1.3',
                           textAlign: 'right',
                           wordBreak: 'break-word',
-                          background: 'rgba(239, 68, 68, 0.1)',
-                          padding: '2px 6px',
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          padding: '3px 8px',
                           borderRadius: '4px',
-                          border: '1px solid rgba(239, 68, 68, 0.25)'
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          cursor: 'pointer'
                         }}
-                        title={clip.error_message}
+                        title="Click to copy full error message"
+                        onClick={() => navigator.clipboard.writeText(clip.error_message || clip.error || '')}
                       >
-                        {clip.error_message.length > 100 ? clip.error_message.slice(0, 100) + '...' : clip.error_message}
+                        ⚠️ {clip.error_message || clip.error}
                       </span>
                     )}
                   </div>
