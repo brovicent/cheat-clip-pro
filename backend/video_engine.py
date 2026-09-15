@@ -241,6 +241,7 @@ def download_clip_segment(
     cmd = [
         *base_cmd,
         "--download-sections", f"*{t_start_fmt}-{t_end_fmt}",
+        "--force-keyframes-at-cuts",
         "-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/bestvideo+bestaudio/best",
         "-N", "4",
         "--fragment-retries", "10",
@@ -291,7 +292,11 @@ def download_clip_segment(
                 "-i", audio_stream,
                 "-t", str(clip_duration),
                 "-map", "0:v:0", "-map", "1:a:0?",
-                "-c:v", "copy", "-c:a", "aac",
+                *ACTIVE_ENCODER_ARGS,
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-avoid_negative_ts", "make_zero",
+                "-movflags", "+faststart",
                 str(output_path)
             ]
             subprocess.run(trim_cmd, capture_output=True, timeout=trim_timeout)
@@ -307,6 +312,7 @@ def download_clip_segment(
         cmd_720p = [
             *base_cmd,
             "--download-sections", f"*{t_start_fmt}-{t_end_fmt}",
+            "--force-keyframes-at-cuts",
             "-f", "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
             "-N", "4",
             "--fragment-retries", "10",

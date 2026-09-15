@@ -35,6 +35,10 @@ export default function App() {
     filename?: string;
     error?: string;
   } | null>(null);
+  const [clipDownloadStates, setClipDownloadStates] = useState<Record<string, {
+    status: 'idle' | 'downloading' | 'ready' | 'error';
+    error?: string;
+  }>>({});
 
   // AI model selection and custom focus prompt states
   const [selectedModel, setSelectedModel] = useState<string>(() => {
@@ -1105,7 +1109,8 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           video_url: targetUrl,
-          video_id: result.video_id
+          video_id: result.video_id,
+          title: result.title
         })
       });
       const startData = await res.json();
@@ -1153,7 +1158,7 @@ export default function App() {
               setToastMessage(t.rawDownload.completedToast);
               const a = document.createElement("a");
               a.href = statusData.download_url || `/api/download-rendered/${statusData.filename}`;
-              a.download = statusData.filename || `raw_${result.video_id}.mp4`;
+              a.download = statusData.filename || `${result.title || result.video_id} (Full Video).mp4`;
               document.body.appendChild(a);
               a.click();
               a.remove();
@@ -1178,6 +1183,93 @@ export default function App() {
       setError(err.message || t.rawDownload.failedToast);
       setIsDownloadingRaw(false);
       setRawDownloadProgress(null);
+    }
+  };
+
+  const handleDownloadRawClip = async (clip: ViralClip, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!result || !result.video_id) return;
+    const clipKey = `${clip.start_time}_${clip.end_time}`;
+    if (clipDownloadStates[clipKey]?.status === 'downloading') return;
+
+    setClipDownloadStates(prev => ({
+      ...prev,
+      [clipKey]: { status: 'downloading' }
+    }));
+    setToastMessage(`${t.results.downloadingRawClip} "${clip.title}"`);
+
+    const targetUrl = url.trim() || `https://www.youtube.com/watch?v=${result.video_id}`;
+
+    try {
+      const res = await fetch("/api/download-raw-clip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          video_url: targetUrl,
+          video_id: result.video_id,
+          start_time: clip.start_time,
+          end_time: clip.end_time,
+          title: clip.title
+        })
+      });
+
+      const startData = await res.json();
+      if (!res.ok || !startData.job_id) {
+        throw new Error(startData.detail || "Failed to start clip download");
+      }
+
+      const jobId = startData.job_id;
+
+      await new Promise<void>((resolve, reject) => {
+        const intervalId = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`/api/download-raw-clip-status/${jobId}`);
+            if (!statusRes.ok) {
+              clearInterval(intervalId);
+              reject(new Error("Failed to get clip download status"));
+              return;
+            }
+            const statusData = await statusRes.json();
+            if (statusData.status === 'ready') {
+              clearInterval(intervalId);
+              setClipDownloadStates(prev => ({
+                ...prev,
+                [clipKey]: { status: 'ready' }
+              }));
+              setToastMessage(`✅ ${clip.title} (raw)`);
+              const a = document.createElement("a");
+              a.href = statusData.download_url;
+              a.download = statusData.filename || `${clip.title} (raw).mp4`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              setTimeout(() => {
+                setClipDownloadStates(prev => ({
+                  ...prev,
+                  [clipKey]: { status: 'idle' }
+                }));
+              }, 4000);
+              resolve();
+            } else if (statusData.status === 'failed') {
+              clearInterval(intervalId);
+              setClipDownloadStates(prev => ({
+                ...prev,
+                [clipKey]: { status: 'error', error: statusData.error }
+              }));
+              reject(new Error(statusData.error || "Clip download failed"));
+            }
+          } catch (pollErr) {
+            clearInterval(intervalId);
+            reject(pollErr);
+          }
+        }, 750);
+      });
+    } catch (err: any) {
+      setClipDownloadStates(prev => ({
+        ...prev,
+        [clipKey]: { status: 'error', error: err.message }
+      }));
+      setError(err.message || "Failed to download clip");
     }
   };
 
@@ -2602,7 +2694,7 @@ Transcript:
                   className="form-input glowing-btn"
                   onClick={handleDownloadRawVideo}
                   disabled={isDownloadingRaw}
-                  title="Download raw original YouTube video at highest 1080p resolution"
+                  title="Download full original YouTube video at highest 1080p resolution"
                   style={{
                     flex: 1,
                     display: 'flex',
@@ -3199,11 +3291,11 @@ Transcript:
                       )}
 
                       {/* Actions and expand button */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '0.75rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <button
                           type="button"
                           className="glowing-btn"
-                          style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', borderRadius: '8px', boxShadow: 'none' }}
+                          style={{ padding: '0.38rem 0.8rem', fontSize: '0.78rem', borderRadius: '7px', boxShadow: 'none', whiteSpace: 'nowrap' }}
                           onClick={(e) => {
                             e.stopPropagation();
                             playClip(clip);
@@ -3212,11 +3304,66 @@ Transcript:
                           {t.results.previewClip}
                         </button>
 
-                        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          {(() => {
+                            const clipKey = `${clip.start_time}_${clip.end_time}`;
+                            const clipDlState = clipDownloadStates[clipKey];
+                            const isDl = clipDlState?.status === 'downloading';
+                            const isReady = clipDlState?.status === 'ready';
+
+                            return (
+                              <button
+                                type="button"
+                                className="form-input"
+                                disabled={isDl}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.3rem',
+                                  padding: '0.38rem 0.65rem',
+                                  fontSize: '0.76rem',
+                                  borderRadius: '7px',
+                                  whiteSpace: 'nowrap',
+                                  cursor: isDl ? 'not-allowed' : 'pointer',
+                                  background: isReady
+                                    ? 'rgba(34, 197, 94, 0.15)'
+                                    : 'rgba(59, 130, 246, 0.12)',
+                                  border: isReady
+                                    ? '1px solid rgba(34, 197, 94, 0.4)'
+                                    : '1px solid rgba(59, 130, 246, 0.35)',
+                                  color: isReady
+                                    ? '#4ade80'
+                                    : '#60a5fa',
+                                  fontWeight: 600,
+                                  transition: 'var(--transition-smooth)'
+                                }}
+                                onClick={(e) => handleDownloadRawClip(clip, e)}
+                                title={t.results.downloadRawClipTooltip}
+                              >
+                                {isDl ? (
+                                  <>
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="spinner-icon" style={{ animation: 'spin 1s linear infinite' }}>
+                                      <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="8"></circle>
+                                    </svg>
+                                    <span>{t.results.downloadingRawClip}</span>
+                                  </>
+                                ) : isReady ? (
+                                  <>
+                                    <span>{t.results.downloadedRawClip}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>{t.results.downloadRawClip}</span>
+                                  </>
+                                )}
+                              </button>
+                            );
+                          })()}
+
                           <button
                             type="button"
                             className="form-input"
-                            style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem', width: 'auto', borderRadius: '8px', cursor: 'pointer', background: 'transparent' }}
+                            style={{ padding: '0.38rem 0.65rem', fontSize: '0.76rem', width: 'auto', borderRadius: '7px', cursor: 'pointer', background: 'transparent', whiteSpace: 'nowrap' }}
                             onClick={(e) => handleCopyTimestamp(clip, e)}
                             title={t.results.copyTimestampTooltip}
                           >
@@ -3225,13 +3372,13 @@ Transcript:
                           <button
                             type="button"
                             className="form-input"
-                            style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem', width: 'auto', borderRadius: '8px', cursor: 'pointer', background: 'transparent' }}
+                            style={{ padding: '0.38rem 0.65rem', fontSize: '0.76rem', width: 'auto', borderRadius: '7px', cursor: 'pointer', background: 'transparent', whiteSpace: 'nowrap' }}
                             onClick={(e) => handleCopyClip(clip, e)}
                           >
                             {t.results.copyDetails}
                           </button>
                           <span
-                            style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 'bold' }}
+                            style={{ display: 'flex', alignItems: 'center', fontSize: '0.74rem', color: 'var(--primary)', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none', marginLeft: '0.15rem' }}
                           >
                             {isExpanded ? t.results.hideTranscript : t.results.showTranscript}
                           </span>
