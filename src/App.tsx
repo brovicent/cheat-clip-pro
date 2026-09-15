@@ -3290,12 +3290,12 @@ Transcript:
                         </div>
                       )}
 
-                      {/* Actions and expand button */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {/* Row 1: Primary Actions (Preview Clip on Left, Download Clip on Right) */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '0.75rem', gap: '0.5rem' }}>
                         <button
                           type="button"
                           className="glowing-btn"
-                          style={{ padding: '0.38rem 0.8rem', fontSize: '0.78rem', borderRadius: '7px', boxShadow: 'none', whiteSpace: 'nowrap' }}
+                          style={{ padding: '0.4rem 0.9rem', fontSize: '0.78rem', borderRadius: '8px', boxShadow: 'none', whiteSpace: 'nowrap' }}
                           onClick={(e) => {
                             e.stopPropagation();
                             playClip(clip);
@@ -3304,85 +3304,87 @@ Transcript:
                           {t.results.previewClip}
                         </button>
 
-                        <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                          {(() => {
-                            const clipKey = `${clip.start_time}_${clip.end_time}`;
-                            const clipDlState = clipDownloadStates[clipKey];
-                            const isDl = clipDlState?.status === 'downloading';
-                            const isReady = clipDlState?.status === 'ready';
+                        {(() => {
+                          const clipKey = `${clip.start_time}_${clip.end_time}`;
+                          const clipDlState = clipDownloadStates[clipKey];
+                          const isDl = clipDlState?.status === 'downloading';
+                          const isReady = clipDlState?.status === 'ready';
 
-                            return (
-                              <button
-                                type="button"
-                                className="form-input"
-                                disabled={isDl}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '0.3rem',
-                                  padding: '0.38rem 0.65rem',
-                                  fontSize: '0.76rem',
-                                  borderRadius: '7px',
-                                  whiteSpace: 'nowrap',
-                                  cursor: isDl ? 'not-allowed' : 'pointer',
-                                  background: isReady
-                                    ? 'rgba(34, 197, 94, 0.15)'
-                                    : 'rgba(59, 130, 246, 0.12)',
-                                  border: isReady
-                                    ? '1px solid rgba(34, 197, 94, 0.4)'
-                                    : '1px solid rgba(59, 130, 246, 0.35)',
-                                  color: isReady
-                                    ? '#4ade80'
-                                    : '#60a5fa',
-                                  fontWeight: 600,
-                                  transition: 'var(--transition-smooth)'
-                                }}
-                                onClick={(e) => handleDownloadRawClip(clip, e)}
-                                title={t.results.downloadRawClipTooltip}
-                              >
-                                {isDl ? (
-                                  <>
-                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="spinner-icon" style={{ animation: 'spin 1s linear infinite' }}>
-                                      <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="8"></circle>
-                                    </svg>
-                                    <span>{t.results.downloadingRawClip}</span>
-                                  </>
-                                ) : isReady ? (
-                                  <>
-                                    <span>{t.results.downloadedRawClip}</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <span>{t.results.downloadRawClip}</span>
-                                  </>
-                                )}
-                              </button>
-                            );
-                          })()}
+                          return (
+                            <button
+                              type="button"
+                              className="form-input"
+                              disabled={isDl}
+                              style={{
+                                width: 'auto',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.4rem 0.85rem',
+                                fontSize: '0.78rem',
+                                borderRadius: '8px',
+                                whiteSpace: 'nowrap',
+                                cursor: isDl ? 'not-allowed' : 'pointer',
+                                background: isReady
+                                  ? 'rgba(34, 197, 94, 0.15)'
+                                  : 'rgba(59, 130, 246, 0.12)',
+                                border: isReady
+                                  ? '1px solid rgba(34, 197, 94, 0.4)'
+                                  : '1px solid rgba(59, 130, 246, 0.35)',
+                                color: isReady
+                                  ? '#4ade80'
+                                  : '#60a5fa',
+                                fontWeight: 600,
+                                transition: 'var(--transition-smooth)'
+                              }}
+                              onClick={(e) => handleDownloadRawClip(clip, e)}
+                              title={t.results.downloadRawClipTooltip}
+                            >
+                              {isDl ? (
+                                <>
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="spinner-icon" style={{ animation: 'spin 1s linear infinite' }}>
+                                    <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="8"></circle>
+                                  </svg>
+                                  <span>{t.results.downloadingRawClip}</span>
+                                </>
+                              ) : isReady ? (
+                                <>
+                                  <span>{t.results.downloadedRawClip}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>{t.results.downloadRawClip}</span>
+                                </>
+                              )}
+                            </button>
+                          );
+                        })()}
+                      </div>
 
-                          <button
-                            type="button"
-                            className="form-input"
-                            style={{ padding: '0.38rem 0.65rem', fontSize: '0.76rem', width: 'auto', borderRadius: '7px', cursor: 'pointer', background: 'transparent', whiteSpace: 'nowrap' }}
-                            onClick={(e) => handleCopyTimestamp(clip, e)}
-                            title={t.results.copyTimestampTooltip}
-                          >
-                            {t.results.copyTimestamp}
-                          </button>
-                          <button
-                            type="button"
-                            className="form-input"
-                            style={{ padding: '0.38rem 0.65rem', fontSize: '0.76rem', width: 'auto', borderRadius: '7px', cursor: 'pointer', background: 'transparent', whiteSpace: 'nowrap' }}
-                            onClick={(e) => handleCopyClip(clip, e)}
-                          >
-                            {t.results.copyDetails}
-                          </button>
-                          <span
-                            style={{ display: 'flex', alignItems: 'center', fontSize: '0.74rem', color: 'var(--primary)', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none', marginLeft: '0.15rem' }}
-                          >
-                            {isExpanded ? t.results.hideTranscript : t.results.showTranscript}
-                          </span>
-                        </div>
+                      {/* Row 2: Secondary Utilities (Copy Timestamp, Copy Details, Show Transcript) */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.45rem', marginTop: '0.4rem', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="form-input"
+                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.76rem', width: 'auto', borderRadius: '7px', cursor: 'pointer', background: 'transparent', whiteSpace: 'nowrap' }}
+                          onClick={(e) => handleCopyTimestamp(clip, e)}
+                          title={t.results.copyTimestampTooltip}
+                        >
+                          {t.results.copyTimestamp}
+                        </button>
+                        <button
+                          type="button"
+                          className="form-input"
+                          style={{ padding: '0.35rem 0.65rem', fontSize: '0.76rem', width: 'auto', borderRadius: '7px', cursor: 'pointer', background: 'transparent', whiteSpace: 'nowrap' }}
+                          onClick={(e) => handleCopyClip(clip, e)}
+                        >
+                          {t.results.copyDetails}
+                        </button>
+                        <span
+                          style={{ display: 'flex', alignItems: 'center', fontSize: '0.74rem', color: 'var(--primary)', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none', marginLeft: '0.15rem' }}
+                        >
+                          {isExpanded ? t.results.hideTranscript : t.results.showTranscript}
+                        </span>
                       </div>
 
                       {/* Expandable transcript text block */}
