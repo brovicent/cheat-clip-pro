@@ -624,15 +624,16 @@ def generate_ass_file(
         formatted_title, title_line_count = "", 1
 
     # 2. Font Sizes based on preset, with automatic scale-down for 3+ line titles
+    # Exported video titles are punchier and larger with compact line spacing
     if font_size_preset == "small":
         sub_font_size = 65
-        title_font_size = 60 if title_line_count >= 3 else 68
+        title_font_size = 74 if title_line_count >= 3 else 84
     elif font_size_preset == "big":
         sub_font_size = 94
-        title_font_size = 85 if title_line_count >= 3 else 98
+        title_font_size = 106 if title_line_count >= 3 else 118
     else:  # medium
         sub_font_size = 78
-        title_font_size = 73 if title_line_count >= 3 else 81
+        title_font_size = 90 if title_line_count >= 3 else 100
 
     # 3. Content boundaries for aspect ratios (Canvas is 1080x1920)
     if target_aspect_ratio == "1:1":
@@ -648,7 +649,9 @@ def generate_ass_file(
         content_top = 0
         content_bot = 1920
 
-    est_title_h = int(title_line_count * (title_font_size * 1.08))
+    # Tight line height step (0.86x) for close, compact multi-line title layout
+    line_step = int(title_font_size * 0.86)
+    est_title_h = int(title_line_count * line_step)
     est_sub_h = int(sub_font_size * 1.08)
     sub_align = 5 if subtitle_position_mode == "center" else 2
 
@@ -779,9 +782,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             t_end_sec = max(1.0, duration_seconds)
 
         end_time_str = format_ass_timestamp(t_end_sec)
-        events.append(
-            f"Dialogue: 1,0:00:00.00,{end_time_str},TitleStyle,,0,0,0,,{{\\q2\\an8\\pos(540,{title_y})}}{formatted_title}"
-        )
+        title_lines = [l.strip() for l in formatted_title.split("\\N") if l.strip()]
+        for line_idx, t_line in enumerate(title_lines):
+            line_y = title_y + (line_idx * line_step)
+            events.append(
+                f"Dialogue: 1,0:00:00.00,{end_time_str},TitleStyle,,0,0,0,,{{\\q2\\an8\\pos(540,{line_y})}}{t_line}"
+            )
 
     # 4. Add Subtitle Events if captions are enabled (guaranteed ZERO vertical glitch / jumping)
     if words and style_preset != "none":

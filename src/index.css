@@ -3127,55 +3127,49 @@ label[for="manual-subtitle-file"]:hover {
   max-width: none;
 }
 
-/* 
- * Hide all YouTube player UI (top title, channel avatar, watch later, share, and bottom watermark/logo)
- * by overscaling the 16:9 iframe vertically inside overflow:hidden.
- * The top (~75px) and bottom (~70px) YouTube UI bars are pushed completely outside the visible viewport.
- */
-
-/* In 9:16 full-bleed vertical mode (container: 320x569) */
+/* In 9:16 full-bleed crop mode, center crop the 16:9 video naturally */
 .aspect-916 .studio-yt-embed-slot iframe {
-  width: 1352px;
-  height: 760px;
+  width: 1012px;
+  height: 569px;
 }
 
-/* In 1:1 square crop mode (container: 320x320) */
+/* In 1:1 square crop mode */
 .aspect-11 .studio-yt-embed-slot iframe {
-  width: 836px;
-  height: 470px;
+  width: 569px;
+  height: 320px;
 }
 
-/* In 4:3 standard crop mode (container: 320x240) */
+/* In 4:3 standard crop mode */
 .aspect-43 .studio-yt-embed-slot iframe {
-  width: 676px;
-  height: 380px;
+  width: 427px;
+  height: 240px;
 }
 
-/* In 16:9 widescreen mode (container: 320x180) */
+/* In 16:9 widescreen mode */
 .aspect-169 .studio-yt-embed-slot iframe {
-  width: 552px;
-  height: 310px;
+  width: 320px;
+  height: 180px;
 }
 
 /* Split-mode overrides for bottom feed */
 .wireframe-content-box.split-mode.aspect-916 .studio-yt-embed-slot iframe {
-  width: 729px;
-  height: 410px;
+  width: 569px;
+  height: 320px;
 }
 
 .wireframe-content-box.split-mode.aspect-11 .studio-yt-embed-slot iframe {
-  width: 712px;
-  height: 400px;
+  width: 569px;
+  height: 320px;
 }
 
 .wireframe-content-box.split-mode.aspect-43 .studio-yt-embed-slot iframe {
-  width: 658px;
-  height: 370px;
+  width: 427px;
+  height: 240px;
 }
 
 .wireframe-content-box.split-mode.aspect-169 .studio-yt-embed-slot iframe {
-  width: 552px;
-  height: 310px;
+  width: 320px;
+  height: 180px;
 }
 
 .studio-preview-click-overlay {
