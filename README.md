@@ -4,9 +4,23 @@
 
 ---
 
-## ⚡ Quick Start (Setup in 4 Steps)
+## ⚡ Quick Start
 
-### Step 1: Requirements
+### 🪟 Windows Users: 1-Click Automated Setup (Easiest)
+If you are on Windows, simply double-click **[`setup_and_run.bat`](setup_and_run.bat)** (or **[`run.bat`](run.bat)**).
+The script will automatically:
+1. Check and auto-install all prerequisites (**Git**, **Node.js LTS**, **Python 3.11**, **FFmpeg**, and **yt-dlp**) via `winget`.
+2. Clone the repository (if the script is run in an empty folder; if it already exists, it skips this step).
+3. Set up an isolated Python virtual environment (`venv`) and install all frontend & backend dependencies.
+4. Launch the application and open **`http://localhost:5173`** in your web browser!
+
+> 💡 **Tip:** Subsequent launches skip dependency checks and start the app in ~1 second!
+
+---
+
+### 🛠️ Manual Setup (All Platforms)
+
+#### Step 1: Requirements
 1. **[Git](https://git-scm.com/)** — If you don't have Git... how did you even get this project? Download ZIP gang? 📦 No judgment, but grab it so you can get updates (`winget install Git.Git` on Windows, `brew install git` on Mac, or from [git-scm.com](https://git-scm.com/)).
 2. **[Node.js](https://nodejs.org/)** (v18 or newer)
 3. **Python** (v3.10 or newer) — Install from [python.org](https://www.python.org/downloads/) or directly from the [Microsoft Store (Windows)](https://apps.microsoft.com/detail/9ncvdn91xzqp)
