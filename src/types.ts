@@ -87,9 +87,14 @@ export interface RenderSettings {
   backgroundStyle: BackgroundStyle;
   enableFaceTracking: boolean;
   streamerPreset: StreamerPreset;
-  titleText: string;
+  titleText?: string;
+  titlePrefix?: string;
+  titleSuffix?: string;
+  fileNamePrefix?: string;
+  fileNameSuffix?: string;
   titlePosition: TitlePosition;
   titleDuration?: TitleDurationOption;
+  subtitlesEnabled?: boolean;
   captionStyle: CaptionStyle;
   captionFont: CaptionFont;
   fontSize: FontSizeOption;

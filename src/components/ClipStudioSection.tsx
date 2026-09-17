@@ -157,12 +157,16 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
   const [backgroundStyle, setBackgroundStyle] = useState<BackgroundStyle>('black');
   const [enableFaceTracking, setEnableFaceTracking] = useState<boolean>(true);
   const [streamerPreset, setStreamerPreset] = useState<StreamerPreset>('none');
-  const [titleText, setTitleText] = useState<string>('');
+  const [titlePrefix, setTitlePrefix] = useState<string>('');
+  const [titleSuffix, setTitleSuffix] = useState<string>('');
   const [titlePosition, setTitlePosition] = useState<TitlePosition>('auto');
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>('viral_pop');
+  const [lastActiveCaptionStyle, setLastActiveCaptionStyle] = useState<CaptionStyle>('viral_pop');
   const [captionFont, setCaptionFont] = useState<CaptionFont>('Outfit');
   const [fontSize, setFontSize] = useState<FontSizeOption>('medium');
   const [textCase, setTextCase] = useState<TextCaseOption>('uppercase');
+  const [fileNamePrefix, setFileNamePrefix] = useState<string>('');
+  const [fileNameSuffix, setFileNameSuffix] = useState<string>('');
 
   // Manual Up/Down positioning for All Formats
   const [titleYPercent, setTitleYPercent] = useState<number>(17);
@@ -1012,11 +1016,15 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
   const phoneWidth = 320;
   const phoneHeight = 569;
 
-  const activeTitle =
-    titleText.trim() ||
+  const baseClipHookTitle =
     currentPreviewClip?.title_suggestion ||
     currentPreviewClip?.title ||
     'YOUR VIRAL HOOK TITLE';
+
+  const activeTitle = `${titlePrefix}${baseClipHookTitle}${titleSuffix}`;
+
+  const sampleRawTitle = currentPreviewClip?.title_suggestion || currentPreviewClip?.title || 'Viral_Clip_1';
+  const sampleCleanTitle = sampleRawTitle.replace(/[\\/*?:"<>|]/g, '').trim() || 'Viral_Clip_1';
 
   const { formatted: formattedTitle, lineCount: titleLineCount } = formatTitleSmart(
     activeTitle,
@@ -1062,9 +1070,14 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
       backgroundStyle,
       enableFaceTracking,
       streamerPreset,
-      titleText,
+      titleText: activeTitle,
+      titlePrefix,
+      titleSuffix,
+      fileNamePrefix,
+      fileNameSuffix,
       titlePosition,
       titleDuration,
+      subtitlesEnabled: captionStyle !== 'none',
       captionStyle,
       captionFont,
       fontSize,
@@ -1490,52 +1503,93 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                 {t.studio.customYBadge(safeTitleY)}
               </span>
             </div>
-            <div className="title-inputs-row">
-              <input
-                type="text"
-                className="studio-text-input"
-                placeholder={t.studio.titlePlaceholder}
-                value={titleText}
-                onChange={e => setTitleText(e.target.value)}
-              />
+
+            {/* Visibility Selector */}
+            <div className="title-inputs-row" style={{ alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                {t.studio.subtitlesVisibilityLabel || "Banner Display:"}
+              </span>
               <select
                 className="studio-select"
                 value={titlePosition}
                 onChange={e => setTitlePosition(e.target.value as TitlePosition)}
+                style={{ minWidth: '130px' }}
               >
                 <option value="auto">{t.studio.titleVisible}</option>
                 <option value="none">{t.studio.titleDisabled}</option>
               </select>
             </div>
 
-            {/* Title Duration Option */}
+            {/* Prefix & Suffix Controls */}
             {titlePosition !== 'none' && (
-              <div className="studio-sub-toggle" style={{ marginTop: '0.75rem' }}>
-                <span className="sub-toggle-label">{t.studio.titleDurationLabel}</span>
-                <div className="toggle-pill-group">
-                  <button
-                    type="button"
-                    className={`pill-btn ${titleDuration === 'entire' ? 'active' : ''}`}
-                    onClick={() => setTitleDuration('entire')}
-                  >
-                    {t.studio.durationEntire}
-                  </button>
-                  <button
-                    type="button"
-                    className={`pill-btn ${titleDuration === '5s' ? 'active' : ''}`}
-                    onClick={() => setTitleDuration('5s')}
-                  >
-                    {t.studio.duration5s}
-                  </button>
-                  <button
-                    type="button"
-                    className={`pill-btn ${titleDuration === '10s' ? 'active' : ''}`}
-                    onClick={() => setTitleDuration('10s')}
-                  >
-                    {t.studio.duration10s}
-                  </button>
+              <>
+                <div className="hook-prefix-suffix-grid">
+                  <div className="hook-input-col">
+                    <label className="hook-input-label">{t.studio.titlePrefixLabel}</label>
+                    <input
+                      type="text"
+                      className="studio-text-input"
+                      placeholder={t.studio.titlePrefixPlaceholder}
+                      value={titlePrefix}
+                      onChange={e => setTitlePrefix(e.target.value)}
+                    />
+                  </div>
+                  <div className="hook-input-col">
+                    <label className="hook-input-label">{t.studio.titleSuffixLabel}</label>
+                    <input
+                      type="text"
+                      className="studio-text-input"
+                      placeholder={t.studio.titleSuffixPlaceholder}
+                      value={titleSuffix}
+                      onChange={e => setTitleSuffix(e.target.value)}
+                    />
+                  </div>
                 </div>
-              </div>
+
+                {/* Combined Banner Preview Info */}
+                <div className="hook-banner-preview-box">
+                  <div className="hook-base-badge">
+                    <span className="badge-tag">📌 {t.studio.titleBaseHookBadge}:</span>
+                    <span className="badge-text" title={baseClipHookTitle}>{baseClipHookTitle}</span>
+                  </div>
+                  <div className="hook-combined-result">
+                    <span className="combined-label">🏷️ {t.studio.titleFullPreview}</span>
+                    <span className="combined-text">
+                      {titlePrefix && <span className="pfx-highlight">{titlePrefix}</span>}
+                      <span className="base-highlight">{baseClipHookTitle}</span>
+                      {titleSuffix && <span className="sfx-highlight">{titleSuffix}</span>}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Title Duration Option */}
+                <div className="studio-sub-toggle" style={{ marginTop: '0.75rem' }}>
+                  <span className="sub-toggle-label">{t.studio.titleDurationLabel}</span>
+                  <div className="toggle-pill-group">
+                    <button
+                      type="button"
+                      className={`pill-btn ${titleDuration === 'entire' ? 'active' : ''}`}
+                      onClick={() => setTitleDuration('entire')}
+                    >
+                      {t.studio.durationEntire}
+                    </button>
+                    <button
+                      type="button"
+                      className={`pill-btn ${titleDuration === '5s' ? 'active' : ''}`}
+                      onClick={() => setTitleDuration('5s')}
+                    >
+                      {t.studio.duration5s}
+                    </button>
+                    <button
+                      type="button"
+                      className={`pill-btn ${titleDuration === '10s' ? 'active' : ''}`}
+                      onClick={() => setTitleDuration('10s')}
+                    >
+                      {t.studio.duration10s}
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
 
@@ -1546,11 +1600,46 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
               <span className="group-badge success-badge">{t.studio.strictlyOneLine}</span>
             </div>
 
-            <div className="caption-styles-grid">
+            {/* Subtitle Visibility Selector */}
+            <div className="title-inputs-row" style={{ alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                {t.studio.subtitlesVisibilityLabel}
+              </span>
+              <select
+                className="studio-select"
+                value={captionStyle !== 'none' ? 'visible' : 'disabled'}
+                onChange={e => {
+                  const isVis = e.target.value === 'visible';
+                  if (isVis) {
+                    setCaptionStyle(lastActiveCaptionStyle !== 'none' ? lastActiveCaptionStyle : 'viral_pop');
+                  } else {
+                    if (captionStyle !== 'none') {
+                      setLastActiveCaptionStyle(captionStyle);
+                    }
+                    setCaptionStyle('none');
+                  }
+                }}
+                style={{ minWidth: '130px' }}
+              >
+                <option value="visible">{t.studio.subtitlesVisible}</option>
+                <option value="disabled">{t.studio.subtitlesDisabled}</option>
+              </select>
+            </div>
+
+            {captionStyle === 'none' && (
+              <div className="subtitles-disabled-notice-box" style={{ marginBottom: '0.75rem' }}>
+                <span>🚫 {t.studio.subtitlesDisabledNotice}</span>
+              </div>
+            )}
+
+            <div className={`caption-styles-grid ${captionStyle === 'none' ? 'subtitles-dimmed' : ''}`}>
               <button
                 type="button"
                 className={`caption-style-card viral-pop ${captionStyle === 'viral_pop' ? 'active' : ''}`}
-                onClick={() => setCaptionStyle('viral_pop')}
+                onClick={() => {
+                  setCaptionStyle('viral_pop');
+                  setLastActiveCaptionStyle('viral_pop');
+                }}
               >
                 <div className="caption-preview-text">
                   VIRAL <span className="pop-yellow">POP</span>
@@ -1561,7 +1650,10 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
               <button
                 type="button"
                 className={`caption-style-card beast-punch ${captionStyle === 'beast_punch' ? 'active' : ''}`}
-                onClick={() => setCaptionStyle('beast_punch')}
+                onClick={() => {
+                  setCaptionStyle('beast_punch');
+                  setLastActiveCaptionStyle('beast_punch');
+                }}
               >
                 <div className="caption-preview-text">
                   BEAST <span className="pop-green">PUNCH</span>
@@ -1572,7 +1664,10 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
               <button
                 type="button"
                 className={`caption-style-card cyber-violet ${captionStyle === 'cyber_violet' ? 'active' : ''}`}
-                onClick={() => setCaptionStyle('cyber_violet')}
+                onClick={() => {
+                  setCaptionStyle('cyber_violet');
+                  setLastActiveCaptionStyle('cyber_violet');
+                }}
               >
                 <div className="caption-preview-text">
                   CYBER <span className="pop-violet">VIOLET</span>
@@ -1583,7 +1678,10 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
               <button
                 type="button"
                 className={`caption-style-card fire-red ${captionStyle === 'fire_red' ? 'active' : ''}`}
-                onClick={() => setCaptionStyle('fire_red')}
+                onClick={() => {
+                  setCaptionStyle('fire_red');
+                  setLastActiveCaptionStyle('fire_red');
+                }}
               >
                 <div className="caption-preview-text">
                   FIRE <span className="pop-red">CRIMSON</span>
@@ -1594,7 +1692,10 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
               <button
                 type="button"
                 className={`caption-style-card electric-cyan ${captionStyle === 'electric_cyan' ? 'active' : ''}`}
-                onClick={() => setCaptionStyle('electric_cyan')}
+                onClick={() => {
+                  setCaptionStyle('electric_cyan');
+                  setLastActiveCaptionStyle('electric_cyan');
+                }}
               >
                 <div className="caption-preview-text">
                   ELECTRIC <span className="pop-cyan">CYAN</span>
@@ -1605,7 +1706,10 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
               <button
                 type="button"
                 className={`caption-style-card golden-aura ${captionStyle === 'golden_aura' ? 'active' : ''}`}
-                onClick={() => setCaptionStyle('golden_aura')}
+                onClick={() => {
+                  setCaptionStyle('golden_aura');
+                  setLastActiveCaptionStyle('golden_aura');
+                }}
               >
                 <div className="caption-preview-text">
                   GOLDEN <span className="pop-gold">AURA</span>
@@ -1616,7 +1720,10 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
               <button
                 type="button"
                 className={`caption-style-card clean-minimal ${captionStyle === 'clean_minimal' ? 'active' : ''}`}
-                onClick={() => setCaptionStyle('clean_minimal')}
+                onClick={() => {
+                  setCaptionStyle('clean_minimal');
+                  setLastActiveCaptionStyle('clean_minimal');
+                }}
               >
                 <div className="caption-preview-text">
                   <span className="minimal-pill">{t.studio.styleCleanMinimal}</span>
@@ -2449,6 +2556,55 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
             </div>
           </div>
 
+          {/* Video File Name Option */}
+          <div className="studio-card-group">
+            <div className="group-header">
+              <span className="group-title">{t.studio.fileNameTitle}</span>
+              <span className="group-badge">{t.studio.fileNameBadge}</span>
+            </div>
+
+            <div className="hook-prefix-suffix-grid">
+              <div className="hook-input-col">
+                <label className="hook-input-label">{t.studio.fileNamePrefixLabel}</label>
+                <input
+                  type="text"
+                  className="studio-text-input"
+                  placeholder={t.studio.fileNamePrefixPlaceholder}
+                  value={fileNamePrefix}
+                  onChange={e => setFileNamePrefix(e.target.value)}
+                />
+              </div>
+              <div className="hook-input-col">
+                <label className="hook-input-label">{t.studio.fileNameSuffixLabel}</label>
+                <input
+                  type="text"
+                  className="studio-text-input"
+                  placeholder={t.studio.fileNameSuffixPlaceholder}
+                  value={fileNameSuffix}
+                  onChange={e => setFileNameSuffix(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Filename Output Example Preview Box */}
+            <div className="filename-preview-box">
+              <div className="filename-preview-header">
+                <span className="filename-preview-label">{t.studio.fileNameExampleLabel}</span>
+                <span className="filename-preview-tag">.mp4</span>
+              </div>
+              <div className="filename-preview-display">
+                <span className="fn-icon">📄</span>
+                <span className="fn-text">
+                  {fileNamePrefix && <span className="pfx-highlight">{fileNamePrefix.replace(/[\\/*?:"<>|]/g, '')}</span>}
+                  <span className="base-highlight">{sampleCleanTitle}</span>
+                  {fileNameSuffix && <span className="sfx-highlight">{fileNameSuffix.replace(/[\\/*?:"<>|]/g, '')}</span>}
+                  <span className="ext-highlight">.mp4</span>
+                </span>
+              </div>
+              <p className="filename-preview-tip">{t.studio.fileNameTip}</p>
+            </div>
+          </div>
+
           {/* 9. Selected Clips Checklist */}
           <div className="studio-card-group">
             <div className="group-header">
@@ -2990,11 +3146,15 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                   <span className="recent-list-title">{t.studio.recentFilesTitle}</span>
                   <div className="recent-items-scroll">
                     {batchProgress.clips.filter(c => c.status === 'completed').map((c, i) => {
-                      const cleanTitle = (c.title || `clip_${i + 1}`).replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${i + 1}`;
+                      const rawBaseTitle = (c.title || `clip_${i + 1}`).replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${i + 1}`;
+                      const fnPfx = (fileNamePrefix || '').replace(/[\\/*?:"<>|]/g, '');
+                      const fnSfx = (fileNameSuffix || '').replace(/[\\/*?:"<>|]/g, '');
+                      const cleanTitle = `${fnPfx}${rawBaseTitle}${fnSfx}`.trim() || rawBaseTitle;
                       let dupCount = 0;
                       const completedClips = batchProgress.clips.filter(x => x.status === 'completed');
                       for (let k = 0; k < i; k++) {
-                        const priorTitle = (completedClips[k].title || `clip_${k + 1}`).replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${k + 1}`;
+                        const priorBase = (completedClips[k].title || `clip_${k + 1}`).replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${k + 1}`;
+                        const priorTitle = `${fnPfx}${priorBase}${fnSfx}`.trim() || priorBase;
                         if (priorTitle.toLowerCase() === cleanTitle.toLowerCase()) {
                           dupCount++;
                         }
@@ -3134,10 +3294,14 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                 {/* Render Items List */}
                 <div className="batch-render-items-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.6rem' }}>
                   {batchProgress.clips.map((clip, idx) => {
-                    const cleanTitle = (clip.title || `clip_${idx + 1}`).replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${idx + 1}`;
+                    const rawBaseTitle = (clip.title || `clip_${idx + 1}`).replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${idx + 1}`;
+                    const fnPfx = (fileNamePrefix || '').replace(/[\\/*?:"<>|]/g, '');
+                    const fnSfx = (fileNameSuffix || '').replace(/[\\/*?:"<>|]/g, '');
+                    const cleanTitle = `${fnPfx}${rawBaseTitle}${fnSfx}`.trim() || rawBaseTitle;
                     let dupCount = 0;
                     for (let i = 0; i < idx; i++) {
-                      const priorTitle = (batchProgress.clips[i].title || `clip_${i + 1}`).replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${i + 1}`;
+                      const priorBase = (batchProgress.clips[i].title || `clip_${i + 1}`).replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${i + 1}`;
+                      const priorTitle = `${fnPfx}${priorBase}${fnSfx}`.trim() || priorBase;
                       if (priorTitle.toLowerCase() === cleanTitle.toLowerCase()) {
                         dupCount++;
                       }

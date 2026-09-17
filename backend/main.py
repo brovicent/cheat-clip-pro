@@ -1380,8 +1380,13 @@ class RenderSettingsModel(BaseModel):
     enable_face_tracking: bool = True
     streamer_preset: str = "none"
     title_text: Optional[str] = None
+    title_prefix: Optional[str] = ""
+    title_suffix: Optional[str] = ""
+    file_name_prefix: Optional[str] = ""
+    file_name_suffix: Optional[str] = ""
     title_position: str = "auto"
     title_duration: Optional[str] = "entire"
+    subtitles_enabled: Optional[bool] = True
     caption_style: str = "viral_pop"
     caption_font: str = "Outfit"
     font_size: str = "medium"
@@ -1462,7 +1467,15 @@ async def process_batch_rendering(batch_id: str, request: RenderBatchRequest):
 
             display_title = None
             if settings.title_position != "none":
-                display_title = settings.title_text if settings.title_text else clip.get("title_suggestion") or clip.get("title")
+                base_title = clip.get("title_suggestion") or clip.get("title") or ""
+                pfx = settings.title_prefix or ""
+                sfx = settings.title_suffix or ""
+                if pfx or sfx:
+                    display_title = f"{pfx}{base_title}{sfx}".strip()
+                elif settings.title_text and settings.title_text.strip():
+                    display_title = settings.title_text.strip()
+                else:
+                    display_title = base_title
 
             ass_path = None
             duration_sec = max(1.0, end_t - start_t)
@@ -1562,9 +1575,12 @@ async def process_batch_rendering(batch_id: str, request: RenderBatchRequest):
                     if fpath.exists():
                         raw_title = (c.get("title") or "").strip()
                         clean_title = re.sub(r'[\\/*?:"<>|]', "", raw_title) or f"clip_{c.get('clip_index', 1)}"
-                        count = title_counts.get(clean_title, 0)
-                        title_counts[clean_title] = count + 1
-                        arc_name = f"{clean_title}.mp4" if count == 0 else f"{clean_title} ({count}).mp4"
+                        fn_pfx = re.sub(r'[\\/*?:"<>|]', "", settings.file_name_prefix or "")
+                        fn_sfx = re.sub(r'[\\/*?:"<>|]', "", settings.file_name_suffix or "")
+                        formatted_name = f"{fn_pfx}{clean_title}{fn_sfx}".strip() or clean_title
+                        count = title_counts.get(formatted_name, 0)
+                        title_counts[formatted_name] = count + 1
+                        arc_name = f"{formatted_name}.mp4" if count == 0 else f"{formatted_name} ({count}).mp4"
                         zipf.write(fpath, arcname=arc_name)
             batch["zip_url"] = f"/api/download-batch-zip/{batch_id}"
         else:
