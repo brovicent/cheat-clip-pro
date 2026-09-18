@@ -94,26 +94,26 @@ app.add_middleware(
 # ----------------------------------------------------------------
 
 class ViralClip(BaseModel):
-    title: str = Field(description="Catchy clip title, max 8 words")
+    title: str = Field(description="Catchy clip title, max 8 words. MUST NEVER use first-person pronouns ('I', 'me', 'my', 'saya', 'aku'). Attribute to the speaker/host by name, role, or use objective framing.")
     start_time: float = Field(description="Clip start in seconds, aligned to a sentence boundary")
     end_time: float = Field(description="Clip end in seconds, aligned to a sentence boundary")
     hook_time: float = Field(description="Absolute timestamp in seconds from video start where the potential hook occurs inside this clip range (must be >= start_time and <= end_time)")
     virality_score: int = Field(description="Virality score 1-100")
     key_quotes: List[str] = Field(description="1-2 key quotes from the clip")
     transcript: str = Field(description="Spoken text of the clip")
-    title_suggestion: str = Field(default="", description="Catchy alternative title suggestion")
-    caption_suggestion: str = Field(default="", description="Engaging social media caption suggestion")
+    title_suggestion: str = Field(default="", description="Catchy alternative title suggestion. MUST NEVER use first-person pronouns ('I', 'me', 'my'). Attribute to speaker or objective topic.")
+    caption_suggestion: str = Field(default="", description="Engaging social media caption suggestion attributing quotes or insights to the speaker.")
     hashtag_suggestion: str = Field(default="", description="Relevant hashtags suggestion (e.g. #hashtag1 #hashtag2)")
 
 class ViralClipGemini(BaseModel):
-    title: str = Field(description="Catchy clip title, max 8 words")
+    title: str = Field(description="Catchy clip title, max 8 words. STRICT RULE: NEVER use first-person pronouns ('I', 'me', 'my', 'myself', 'aku', 'saya'). Attribute to the person speaking by name, host/guest title, or use third-person objective framing so it does not look like the user's opinion.")
     start_time: float = Field(description="Clip start in seconds, aligned to a sentence boundary")
     end_time: float = Field(description="Clip end in seconds, aligned to a sentence boundary")
     hook_time: float = Field(description="Absolute timestamp in seconds from video start where the potential hook occurs inside this clip range (must be >= start_time and <= end_time)")
     virality_score: int = Field(description="Virality score 1-100")
     key_quotes: List[str] = Field(description="1-2 key quotes from the clip")
-    title_suggestion: str = Field(default="", description="Catchy alternative title suggestion")
-    caption_suggestion: str = Field(default="", description="Engaging social media caption suggestion")
+    title_suggestion: str = Field(default="", description="Catchy alternative title suggestion. STRICT RULE: NEVER use first-person ('I', 'me', 'my', 'saya', 'aku'). Attribute to the speaker/host/guest by name or topic.")
+    caption_suggestion: str = Field(default="", description="Engaging social media caption suggestion attributing insights or story to the speaker.")
     hashtag_suggestion: str = Field(default="", description="Relevant hashtags suggestion (e.g. #hashtag1 #hashtag2)")
 
 class VideoAnalysis(BaseModel):
@@ -150,6 +150,7 @@ class TranscriptLine(BaseModel):
 class AnalyzeResponse(BaseModel):
     video_id: str
     title: str
+    channel: Optional[str] = None
     duration: float
     heatmap: List[HeatmapPoint]
     summary: str
@@ -331,8 +332,10 @@ def fetch_video_metadata(url: str):
             info = ydl.extract_info(url, download=False)
             if not info:
                 raise Exception("yt-dlp returned empty info dict")
+            channel = info.get('channel') or info.get('uploader') or info.get('creator') or ''
             return {
                 "title": info.get('title') or 'Unknown YouTube Video',
+                "channel": channel,
                 "duration": float(info.get('duration') or 0.0),
                 "heatmap": info.get('heatmap') or [],
                 "is_live": bool(info.get('is_live') or False),
@@ -346,6 +349,7 @@ def fetch_video_metadata(url: str):
     if video_id:
         return {
             "title": f"YouTube Video ({video_id})",
+            "channel": "",
             "duration": 0.0,
             "heatmap": [],
             "is_live": False,
@@ -475,6 +479,52 @@ def lowercase_hashtags_in_string(text: str) -> str:
     if not text:
         return text
     return re.sub(r'#\w+', lambda m: m.group(0).lower(), text)
+
+def sanitize_first_person_title(title: str, speaker_or_channel: str = "") -> str:
+    """
+    Sanitizes accidental first-person perspective ('I', 'Me', 'My', 'Saya', 'Aku', 'Gue')
+    from generated clip titles and title suggestions, replacing them with speaker or channel attribution,
+    or objective framing so titles never appear as the user's personal opinion.
+    """
+    if not title:
+        return title
+    t = title.strip()
+    speaker = speaker_or_channel.strip() if speaker_or_channel else ""
+    subject = speaker if speaker else "The Speaker"
+
+    # 1. English Why / How / What / When / Where
+    t = re.sub(r"^why\s+i\s+think\b", f"{subject} Explains Why", t, flags=re.IGNORECASE)
+    t = re.sub(r"^why\s+i\s+believe\b", f"{subject} Explains Why", t, flags=re.IGNORECASE)
+    t = re.sub(r"^why\s+i\s+", f"Why {subject} ", t, flags=re.IGNORECASE)
+    t = re.sub(r"^how\s+i\s+", f"How {subject} ", t, flags=re.IGNORECASE)
+    t = re.sub(r"^what\s+i\s+think\b", f"{subject}'s Thoughts On", t, flags=re.IGNORECASE)
+    t = re.sub(r"^what\s+i\s+learned\b", f"What {subject} Learned", t, flags=re.IGNORECASE)
+    t = re.sub(r"^what\s+i\s+", f"What {subject} ", t, flags=re.IGNORECASE)
+    t = re.sub(r"^when\s+i\s+", f"When {subject} ", t, flags=re.IGNORECASE)
+    t = re.sub(r"^where\s+i\s+", f"Where {subject} ", t, flags=re.IGNORECASE)
+
+    # 2. English My [Noun] (e.g. My Opinion, My Story, My Regret)
+    t = re.sub(r"^my\s+([a-zA-Z]+)", lambda m: f"{subject}'s {m.group(1)}" if speaker else f"The {m.group(1)}", t, flags=re.IGNORECASE)
+
+    # 3. English First-person action verbs (e.g. I Tried, I Discovered, I Built)
+    t = re.sub(r"^i\s+(tried|found|made|discovered|bought|quit|lost|learned|realized|spent|built|saw|went|started|joined|left|hate|love)\b", rf"{subject} \1", t, flags=re.IGNORECASE)
+    t = re.sub(r"^i\s+was\b", f"{subject} Was", t, flags=re.IGNORECASE)
+    t = re.sub(r"^i\s+am\b", f"{subject} Is", t, flags=re.IGNORECASE)
+    t = re.sub(r"^i\s+have\b", f"{subject} Has", t, flags=re.IGNORECASE)
+    t = re.sub(r"^i\s+had\b", f"{subject} Had", t, flags=re.IGNORECASE)
+    t = re.sub(r"^i\s+got\b", f"{subject} Got", t, flags=re.IGNORECASE)
+    t = re.sub(r"^i\s+think\b", f"{subject} Thinks", t, flags=re.IGNORECASE)
+    t = re.sub(r"^i\s+believe\b", f"{subject} Believes", t, flags=re.IGNORECASE)
+
+    # 4. Indonesian / Malay first-person replacements (Saya, Aku, Gue, Gw)
+    indo_subject = speaker if speaker else "Host"
+    t = re.sub(r"^(kenapa|mengapa)\s+(saya|aku|gue|gw)\s+", rf"\1 {indo_subject} ", t, flags=re.IGNORECASE)
+    t = re.sub(r"^(cara|bagaimana)\s+(saya|aku|gue|gw)\s+", rf"Cara {indo_subject} ", t, flags=re.IGNORECASE)
+    t = re.sub(r"^(alasan)\s+(saya|aku|gue|gw)\s+", rf"Alasan {indo_subject} ", t, flags=re.IGNORECASE)
+    t = re.sub(r"^(saya|aku|gue|gw)\s+(mencoba|menemukan|membuat|yakin|berpikir|menyesal|kehilangan|belajar|mulai|berhenti)\b", rf"{indo_subject} \2", t, flags=re.IGNORECASE)
+    t = re.sub(r"^(pendapat|opini)\s+(saya|aku|gue|gw)\b", rf"Opini {indo_subject}", t, flags=re.IGNORECASE)
+
+    return t.strip()
 
 def get_average_heatmap_value(start: float, end: float, heatmap: List[dict]) -> float:
     """Calculates the average retention score from the heatmap for a transcript time segment."""
@@ -681,9 +731,11 @@ async def analyze_video(request: AnalyzeRequest):
             "message": "Connecting to YouTube — fetching video title and duration..."
         })
 
+        channel = ""
         try:
             metadata = await asyncio.to_thread(fetch_video_metadata, canonical_url)
             title    = metadata["title"]
+            channel  = metadata.get("channel", "")
             duration = metadata["duration"]
             heatmap  = metadata.get("heatmap") or []
             is_live  = metadata.get("is_live", False)
@@ -699,6 +751,7 @@ async def analyze_video(request: AnalyzeRequest):
         except Exception as e:
             if is_mock:
                 title = "Mock YouTube Video"
+                channel = "Cheat Clip Pro"
                 duration = 212.0
                 heatmap = []
                 is_live = False
@@ -929,7 +982,7 @@ async def analyze_video(request: AnalyzeRequest):
                 for pt in heatmap
             ]
             result = AnalyzeResponse(
-                video_id=video_id, title=title, duration=duration or 200.0,
+                video_id=video_id, title=title, channel=channel, duration=duration or 200.0,
                 heatmap=mock_heatmap,
                 summary="Mock analysis: this video explains how CHEAT CLIP PRO works. #aitools #videoediting #productivity",
                 clips=mock_clips,
@@ -984,14 +1037,26 @@ async def analyze_video(request: AnalyzeRequest):
         if request.custom_prompt and request.custom_prompt.strip():
             focus_instruction = f"CRITICAL FOCUS: The user specifically wants you to find clips matching the following query/theme: \"{request.custom_prompt.strip()}\". Prioritize and tailor your selection of viral clips to fit this request, while still ensuring they make good standalone clips.\n\n"
 
+        channel_context = f"- Channel / Host / Creator: {channel}\n" if channel else ""
+
         prompt = (
-            f"You are a viral video clip finder.\n"
-            f"Find {clip_range} short-form clip candidates from this YouTube transcript for TikTok/Reels/Shorts.\n\n"
-            f"Title: {title}\n"
-            f"Duration Range: {int(start_bound)}s to {int(end_bound)}s (Length: {int(duration)}s) | Target clip length: {dur_range}\n"
-            f"{heatmap_note}\n"
+            f"You are an expert viral video clip editor finding top clip candidates for TikTok, Instagram Reels, and YouTube Shorts.\n"
+            f"Analyze this YouTube video transcript and find {clip_range} high-performing, standalone clip candidates.\n\n"
+            f"VIDEO CONTEXT:\n"
+            f"- Video Title: {title}\n"
+            f"{channel_context}"
+            f"- Video Duration: {int(start_bound)}s to {int(end_bound)}s (Total: {int(duration)}s) | Target clip length: {dur_range}\n"
+            f"- Heatmap: {heatmap_note}\n\n"
             f"{focus_instruction}"
-            f"Match output language to transcript language.\n\n"
+            f"CRITICAL TITLE & ATTRIBUTION RULES (NO FIRST-PERSON 'I' OR 'ME'):\n"
+            f"1. NEVER write clip titles or title suggestions using first-person pronouns ('I', 'me', 'my', 'mine', 'myself', or equivalents in other languages such as 'saya', 'aku', 'gue')!\n"
+            f"2. The user posting or curating these clips is a third-party editor, NOT the person speaking in the video. Titles must NEVER make it look like the clip is expressing the user's personal opinion, story, or reaction (e.g. NEVER write 'Why I think this is bad', 'How I made $100K', 'My biggest mistake', or 'I was shocked').\n"
+            f"3. ALWAYS attribute statements to the context of the video and the actual person speaking:\n"
+            f"   - Use the actual name of the speaker, host, or guest from the video title, channel name ({channel or 'Host'}), or transcript dialogue (e.g. '{channel or 'Speaker'} Explains...', 'Why {channel or 'Host'} Shocked Fans', '[Name] Reveals The Truth').\n"
+            f"   - If the speaker's name is not explicitly stated, use their role or descriptive title (e.g. 'Host Reacts...', 'CEO Reveals...', 'Expert Explains...', 'Guest Breaks Down...').\n"
+            f"   - Or use objective, curiosity-driven framing (e.g. 'The Real Truth About...', 'How To Master...', 'Why Most People Fail At...', 'The Harsh Reality of...').\n"
+            f"4. Keep titles snappy, viral, engaging, and under 8 words.\n"
+            f"5. Match output language to transcript language.\n\n"
             f"Transcript (start|end[|interest] text):\n---\n{transcript_text}\n---\n\n"
             f"Rules: use exact seconds from transcript; clips must start/end at sentence boundaries; do not overlap.\n"
             f"Return {clip_range} clips sorted by virality_score desc."
@@ -1135,13 +1200,13 @@ async def analyze_video(request: AnalyzeRequest):
                             "summary": getattr(parsed, 'summary', ''),
                             "clips": [
                                 {
-                                    "title": getattr(c, 'title', ''),
+                                    "title": sanitize_first_person_title(getattr(c, 'title', ''), channel),
                                     "start_time": getattr(c, 'start_time', 0.0),
                                     "end_time": getattr(c, 'end_time', 0.0),
                                     "hook_time": getattr(c, 'hook_time', None),
                                     "virality_score": getattr(c, 'virality_score', 0),
                                     "key_quotes": getattr(c, 'key_quotes', []),
-                                    "title_suggestion": getattr(c, 'title_suggestion', ''),
+                                    "title_suggestion": sanitize_first_person_title(getattr(c, 'title_suggestion', ''), channel),
                                     "caption_suggestion": getattr(c, 'caption_suggestion', ''),
                                     "hashtag_suggestion": getattr(c, 'hashtag_suggestion', ''),
                                 }
@@ -1322,14 +1387,14 @@ async def analyze_video(request: AnalyzeRequest):
             hashtag_sug = lowercase_hashtags_in_string(raw_clip.get('hashtag_suggestion', ''))
             
             final_clips.append(ViralClip(
-                title=raw_clip.get('title', ''),
+                title=sanitize_first_person_title(raw_clip.get('title', ''), channel),
                 start_time=start,
                 end_time=end,
                 hook_time=hook,
                 virality_score=raw_clip.get('virality_score', 0),
                 key_quotes=raw_clip.get('key_quotes') or [],
                 transcript=" ".join(clip_lines),
-                title_suggestion=raw_clip.get('title_suggestion', ''),
+                title_suggestion=sanitize_first_person_title(raw_clip.get('title_suggestion', ''), channel),
                 caption_suggestion=caption_sug,
                 hashtag_suggestion=hashtag_sug
             ))
@@ -1359,6 +1424,7 @@ async def analyze_video(request: AnalyzeRequest):
         final_result = AnalyzeResponse(
             video_id=video_id,
             title=title,
+            channel=channel,
             duration=duration,
             heatmap=response_heatmap,
             summary=clean_summary,
