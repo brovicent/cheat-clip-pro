@@ -181,6 +181,14 @@ def step_compile_installer():
         )
 
     iss_file = PACKAGING_DIR / "installer.iss"
+
+    # Remove any existing installer files in dist_installer to avoid file lock collisions
+    for old_exe in DIST_INSTALLER.glob("CheatClipPro-Setup*.exe"):
+        try:
+            old_exe.unlink()
+        except Exception as e:
+            log(f"Warning: Could not remove old installer {old_exe.name}: {e}")
+
     cmd = [iscc, str(iss_file)]
     log(f"Running: {iscc} {iss_file}")
     res = subprocess.run(cmd, cwd=str(PACKAGING_DIR))
