@@ -28,6 +28,12 @@ def ensure_ffmpeg_in_path():
         return
     local_app_data = os.environ.get("LOCALAPPDATA", "")
     candidate_roots = [
+        # Bundled application directories (for packaged Windows app)
+        Path(sys.executable).parent / "bin",
+        Path(sys.executable).parent,
+        BASE_DIR / "bin",
+        BASE_DIR.parent / "bin",
+        BASE_DIR.parent / "dist" / "bin",
         Path(local_app_data) / "Microsoft" / "WinGet" / "Packages" if local_app_data else None,
         Path("C:/Program Files/ffmpeg/bin"),
         Path("C:/ffmpeg/bin"),

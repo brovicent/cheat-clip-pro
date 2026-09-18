@@ -12,6 +12,13 @@
 node_modules/
 dist/
 dist-ssr/
+dist_app/
+dist_installer/
+dist_pyinstaller/
+build/
+*.manifest
+*.pkg
+*.pyz
 *.local
 
 # Build artifacts

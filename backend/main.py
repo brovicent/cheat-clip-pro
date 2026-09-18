@@ -1,6 +1,12 @@
 import os
 import sys
 
+# Windowed / no-console PyInstaller safeguard
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
 # Windows Python 3.14 compatibility hotfix for unix RTLD flags and uname used in yt-dlp plugins
 for flag in ('RTLD_LAZY', 'RTLD_NOW', 'RTLD_GLOBAL', 'RTLD_LOCAL', 'RTLD_NODELETE', 'RTLD_NOLOAD', 'RTLD_DEEPBIND'):
     if not hasattr(os, flag):
@@ -78,7 +84,8 @@ logger = logging.getLogger("cheat-clip-pro")
 UPLOADS_DIR = TEMP_DIR / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="CHEAT CLIP PRO API", description="AI Powered YouTube Auto Clipper")
+APP_VERSION = "1.0.0"
+app = FastAPI(title="CHEAT CLIP PRO API", description="AI Powered YouTube Auto Clipper", version=APP_VERSION)
 
 # Configure CORS
 app.add_middleware(
@@ -2339,6 +2346,147 @@ async def clear_temp_folder():
         "has_cookies": cookies_present,
         "message": f"Successfully cleared {cleared_files} temporary files ({formatted}). Stored YouTube cookies preserved."
     }
+
+
+# ----------------------------------------------------------------
+# System & Auto-Update Endpoints
+# ----------------------------------------------------------------
+
+@app.get("/api/system/version")
+async def get_system_version():
+    return {
+        "version": APP_VERSION,
+        "is_packaged": getattr(sys, "frozen", False)
+    }
+
+
+@app.get("/api/system/check-update")
+async def check_app_updates():
+    """Check GitHub releases for updates to Cheat Clip Pro."""
+    repo = "galihjuansaputra/cheat-clip-pro"
+    url = f"https://api.github.com/repos/{repo}/releases/latest"
+    try:
+        import urllib.request
+        headers = {"User-Agent": "CheatClipPro-App"}
+        req_obj = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req_obj, timeout=6) as resp:
+            status_code = resp.status
+            if status_code != 200:
+                return {
+                    "success": False,
+                    "current_version": APP_VERSION,
+                    "latest_version": APP_VERSION,
+                    "has_update": False,
+                    "message": f"GitHub returned status {status_code}"
+                }
+            data = json.loads(resp.read().decode("utf-8"))
+
+        latest_raw = data.get("tag_name", "0.0.0")
+        latest_clean = latest_raw.lstrip("v")
+        current_clean = APP_VERSION.lstrip("v")
+
+        def parse_v(v_str: str) -> List[int]:
+            nums = re.findall(r"\d+", v_str)
+            return [int(n) for n in nums] if nums else [0]
+
+        has_update = parse_v(latest_clean) > parse_v(current_clean)
+
+        download_url = data.get("html_url")
+        for asset in data.get("assets", []):
+            name = asset.get("name", "").lower()
+            if name.endswith(".exe"):
+                download_url = asset.get("browser_download_url")
+                break
+
+        return {
+            "success": True,
+            "current_version": APP_VERSION,
+            "latest_version": latest_raw,
+            "has_update": has_update,
+            "release_name": data.get("name") or latest_raw,
+            "release_notes": data.get("body") or "",
+            "download_url": download_url,
+            "published_at": data.get("published_at")
+        }
+    except Exception as e:
+        logger.warning(f"Could not check for updates: {e}")
+        return {
+            "success": False,
+            "current_version": APP_VERSION,
+            "latest_version": APP_VERSION,
+            "has_update": False,
+            "error": str(e)
+        }
+
+
+# ----------------------------------------------------------------
+# Static Files & SPA Production Serving
+# ----------------------------------------------------------------
+
+_dist_candidates = [
+    os.path.join(_base_dir, "..", "dist"),
+    os.path.join(_base_dir, "dist"),
+    os.path.join(os.path.dirname(sys.executable), "dist"),
+    os.path.join(os.path.dirname(sys.executable), "_internal", "dist"),
+]
+DIST_DIR = None
+for candidate in _dist_candidates:
+    if os.path.isdir(candidate) and os.path.exists(os.path.join(candidate, "index.html")):
+        DIST_DIR = os.path.abspath(candidate)
+        break
+
+if DIST_DIR:
+    from fastapi.staticfiles import StaticFiles
+    logger.info(f"Serving production frontend UI from: {DIST_DIR}")
+
+    assets_dir = os.path.join(DIST_DIR, "assets")
+    if os.path.isdir(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa_frontend(full_path: str):
+        # Do not catch API or documentation routes
+        if full_path.startswith("api/") or full_path in ("docs", "redoc", "openapi.json"):
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        target_file = os.path.join(DIST_DIR, full_path)
+        if os.path.isfile(target_file):
+            return FileResponse(target_file)
+
+        index_file = os.path.join(DIST_DIR, "index.html")
+        if os.path.isfile(index_file):
+            return FileResponse(index_file)
+        raise HTTPException(status_code=404, detail="Frontend index.html not found")
+
+
+def _open_browser_when_ready(url: str, delay: float = 1.2):
+    def _target():
+        time.sleep(delay)
+        try:
+            import webbrowser
+            webbrowser.open(url)
+        except Exception as e:
+            logger.warning(f"Could not auto-open browser: {e}")
+    import threading
+    t = threading.Thread(target=_target, daemon=True)
+    t.start()
+
+
+if __name__ == "__main__":
+    import uvicorn
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Cheat Clip Pro")
+    parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host address to bind")
+    parser.add_argument("--open-browser", action="store_true", help="Auto open browser on start")
+    cli_args, _ = parser.parse_known_args()
+
+    # Automatically launch browser if packaged or requested via flag
+    if cli_args.open_browser or getattr(sys, "frozen", False):
+        _open_browser_when_ready(f"http://{cli_args.host}:{cli_args.port}")
+
+    uvicorn.run(app, host=cli_args.host, port=cli_args.port, log_level="info")
 
 
 
