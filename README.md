@@ -6,21 +6,15 @@
 
 ## ⚡ Quick Start
 
-### 🪟 Windows Users: 1-Click Installer (Zero Setup Required)
-For regular users on Windows, simply download the latest **`CheatClipPro-Setup.exe`** from [Releases](https://github.com/galihjuansaputra/cheat-clip-pro/releases).
+### 🪟 Windows Users: 1-Click Automated Setup (Easiest)
+If you are on Windows, simply double-click **[`setup_and_run.bat`](setup_and_run.bat)** (or **[`run.bat`](run.bat)**).
+The script will automatically:
+1. Check and auto-install all prerequisites (**Git**, **Node.js LTS**, **Python 3.11**, **FFmpeg**, and **yt-dlp**) via `winget`.
+2. Clone the repository (if the script is run in an empty folder; if it already exists, it skips this step).
+3. Set up an isolated Python virtual environment (`venv`) and install all frontend & backend dependencies.
+4. Launch the application and open **`http://localhost:5173`** in your web browser!
 
-1. Double-click **`CheatClipPro-Setup.exe`** and click **Next** $\rightarrow$ **Install**.
-2. A shortcut will appear on your **Desktop** and **Start Menu**.
-3. Launch Cheat Clip Pro — it opens in your browser automatically!
-
-> 💡 **Zero Technical Prerequisites:** The installer includes everything (embedded runtime, video engine, and pre-configured FFmpeg). No Python, Node.js, Git, or terminal commands needed.
-
----
-
-### 🔨 Building the Installer (For Developers)
-To compile a new standalone `.exe` installer from source:
-1. Double-click **`build_installer.bat`** (or run `python scripts/build_installer.py`).
-2. The ready-to-distribute installer will be created in **`dist_installer/`**!
+> 💡 **Tip:** Subsequent launches skip dependency checks and start the app in ~1 second!
 
 ---
 
