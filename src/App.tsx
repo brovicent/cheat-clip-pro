@@ -3484,28 +3484,10 @@ Transcript:
         videoTitle={result?.title}
         videoDuration={result?.duration || 0}
         transcript={result?.transcript}
-        isDownloading={trimmerClip ? clipDownloadStates[`${trimmerClip.start_time}_${trimmerClip.end_time}`]?.status === 'downloading' : false}
         onClose={() => setTrimmerClip(null)}
-        onDownload={(adjustedClip) => {
+        onDownload={async (adjustedClip) => {
           handleApplyAdjustedClipToResults(adjustedClip);
-          handleDownloadRawClip(adjustedClip);
-          setTrimmerClip(null);
-        }}
-        onApplyToStudio={(adjustedClip) => {
-          handleApplyAdjustedClipToResults(adjustedClip);
-          setActiveClip(adjustedClip);
-          const clipKey = `${adjustedClip.start_time}_${adjustedClip.end_time}`;
-          if (!markedClips[clipKey]) {
-            toggleMarkedClip(clipKey);
-          }
-          setTrimmerClip(null);
-          setToastMessage("✂️ Clip context updated & loaded in Studio!");
-          setTimeout(() => {
-            const studioEl = document.getElementById('clip-studio-section');
-            if (studioEl) {
-              studioEl.scrollIntoView({ behavior: 'smooth' });
-            }
-          }, 100);
+          await handleDownloadRawClip(adjustedClip);
         }}
       />
 
