@@ -824,15 +824,42 @@ h1, h2, h3, h4 {
   background: var(--bg-surface);
   border: 1px solid var(--accent);
   color: var(--text-primary);
-  padding: 1rem 1.5rem;
+  padding: 0.85rem 1.15rem 0.85rem 1.25rem;
   border-radius: 12px;
   font-weight: 600;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 10px rgba(16, 185, 129, 0.2);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  z-index: 1000;
+  gap: 0.65rem;
+  z-index: 100000;
   animation: slide-in 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+.toast-text {
+  flex: 1;
+  font-size: 0.88rem;
+  word-break: break-word;
+}
+
+.toast-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  padding: 0.25rem 0.45rem;
+  margin-left: 0.5rem;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: var(--transition-smooth);
+}
+
+.toast-close-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
 }
 
 @keyframes slide-in {
@@ -4264,6 +4291,28 @@ label[for="manual-subtitle-file"]:hover {
     max-height: 96vh !important;
     padding: 0.5rem !important;
   }
+}
+
+.trimmer-player-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #090d16;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.trimmer-player-wrapper iframe,
+.trimmer-player-wrapper #trimmer-yt-player-container iframe,
+.trimmer-player-wrapper #trimmer-yt-iframe-slot iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  display: block !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
 }
 
 

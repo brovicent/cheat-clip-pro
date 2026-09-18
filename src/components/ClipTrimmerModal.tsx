@@ -76,6 +76,7 @@ export const ClipTrimmerModal: React.FC<ClipTrimmerModalProps> = ({
   const [showTranscript, setShowTranscript] = useState<boolean>(true);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
+  const [playerReady, setPlayerReady] = useState<boolean>(false);
 
   const timelineBarRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef<'start' | 'end' | 'playhead' | null>(null);
@@ -113,58 +114,117 @@ export const ClipTrimmerModal: React.FC<ClipTrimmerModalProps> = ({
   // Setup YouTube Iframe API player for the modal preview
   useEffect(() => {
     let isMounted = true;
+    let pollTimer: number | null = null;
+    let fallbackTimer: number | null = null;
+    let attempts = 0;
+
+    setPlayerReady(false);
+
+    // Ensure YouTube IFrame API is present
+    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+      const tag = document.createElement('script');
+      tag.id = 'youtube-iframe-api-script';
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    }
+
+    const loadDirectIframe = (container: HTMLElement) => {
+      if (!isMounted) return;
+      const embedUrl = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(adjustedStart)}&controls=1&rel=0&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`;
+      container.innerHTML = `<iframe id="trimmer-direct-yt-iframe" src="${embedUrl}" style="width:100%!important;height:100%!important;border:none;display:block;position:absolute;top:0;left:0;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+      setPlayerReady(true);
+    };
 
     const setupPlayer = () => {
-      if (!window.YT || !window.YT.Player) {
-        return false;
-      }
-      try {
-        const container = document.getElementById('trimmer-yt-player-container');
-        if (!container) return false;
+      if (!isMounted) return;
 
-        // Destroy previous instance if any
+      const container = document.getElementById('trimmer-yt-player-container');
+      if (!container) {
+        attempts++;
+        if (attempts < 45) {
+          pollTimer = window.setTimeout(setupPlayer, 100);
+        }
+        return;
+      }
+
+      if (!window.YT || !window.YT.Player) {
+        attempts++;
+        if (attempts < 40) {
+          pollTimer = window.setTimeout(setupPlayer, 120);
+        } else {
+          // If YT API doesn't arrive within ~4.5 seconds, use direct embed iframe
+          loadDirectIframe(container);
+        }
+        return;
+      }
+
+      try {
         if (ytPlayerRef.current && typeof ytPlayerRef.current.destroy === 'function') {
-          ytPlayerRef.current.destroy();
+          try {
+            ytPlayerRef.current.destroy();
+          } catch {}
           ytPlayerRef.current = null;
         }
 
-        ytPlayerRef.current = new window.YT.Player('trimmer-yt-player-container', {
+        container.innerHTML = '<div id="trimmer-yt-iframe-slot" style="width:100%;height:100%;"></div>';
+
+        ytPlayerRef.current = new window.YT.Player('trimmer-yt-iframe-slot', {
           videoId: videoId,
           playerVars: {
-            autoplay: 1,
+            autoplay: 0,
             start: Math.floor(adjustedStart),
             controls: 1,
             modestbranding: 1,
             rel: 0,
+            playsinline: 1,
+            enablejsapi: 1,
+            origin: window.location.origin,
           },
           events: {
             onReady: (e: any) => {
               if (!isMounted) return;
+              setPlayerReady(true);
               try {
                 e.target.seekTo(adjustedStart, true);
-                e.target.pauseVideo();
               } catch {}
             },
             onStateChange: (e: any) => {
               if (!isMounted) return;
               setIsPlaying(e.data === 1);
+            },
+            onError: () => {
+              if (!isMounted) return;
+              loadDirectIframe(container);
             }
           }
         });
-        return true;
       } catch (err) {
         console.warn('Could not initialize YT Player for trimmer:', err);
-        return false;
+        attempts++;
+        if (attempts < 40) {
+          pollTimer = window.setTimeout(setupPlayer, 150);
+        } else {
+          loadDirectIframe(container);
+        }
       }
     };
 
-    const timer = setTimeout(() => {
-      setupPlayer();
-    }, 150);
+    // Safety fallback timer if onReady never triggers within 4.5s
+    fallbackTimer = window.setTimeout(() => {
+      if (isMounted && !playerReady) {
+        const container = document.getElementById('trimmer-yt-player-container');
+        if (container && (!ytPlayerRef.current || !playerReady)) {
+          loadDirectIframe(container);
+        }
+      }
+    }, 4500);
+
+    pollTimer = window.setTimeout(setupPlayer, 60);
 
     return () => {
       isMounted = false;
-      clearTimeout(timer);
+      if (pollTimer) clearTimeout(pollTimer);
+      if (fallbackTimer) clearTimeout(fallbackTimer);
       if (ytPlayerRef.current && typeof ytPlayerRef.current.destroy === 'function') {
         try {
           ytPlayerRef.current.destroy();
@@ -172,7 +232,7 @@ export const ClipTrimmerModal: React.FC<ClipTrimmerModalProps> = ({
         ytPlayerRef.current = null;
       }
     };
-  }, [videoId]);
+  }, [videoId, clip?.start_time]);
 
   // Monitor playhead and enforce looping/pause at adjustedEnd
   useEffect(() => {
@@ -337,7 +397,7 @@ export const ClipTrimmerModal: React.FC<ClipTrimmerModalProps> = ({
   };
 
   return (
-    <div className="modal-backdrop" onClick={isDownloading ? undefined : onClose} style={{ zIndex: 10000, padding: '1rem' }}>
+    <div className="modal-backdrop" onClick={onClose} style={{ zIndex: 10000, padding: '1rem' }}>
       <div
         className="studio-modal-card clip-trimmer-modal"
         onClick={(e) => e.stopPropagation()}
@@ -373,9 +433,8 @@ export const ClipTrimmerModal: React.FC<ClipTrimmerModalProps> = ({
           <button
             className="studio-close-btn"
             onClick={onClose}
-            disabled={isDownloading}
             title={t.trimmer.closeBtn}
-            style={{ opacity: isDownloading ? 0.4 : 1, cursor: isDownloading ? 'not-allowed' : 'pointer' }}
+            style={{ cursor: 'pointer' }}
           >
             ✕
           </button>
@@ -403,8 +462,64 @@ export const ClipTrimmerModal: React.FC<ClipTrimmerModalProps> = ({
           {/* Top Row: Embedded Video Preview Player & Live Context Metrics */}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1.25fr) minmax(260px, 1fr)', gap: '1rem', alignItems: 'start' }}>
             {/* Video Player Box */}
-            <div style={{ background: '#000', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)', position: 'relative', aspectRatio: '16/9' }}>
-              <div id="trimmer-yt-player-container" style={{ width: '100%', height: '100%' }}></div>
+            <div
+              className="trimmer-player-wrapper"
+              style={{
+                background: '#090d16',
+                backgroundImage: videoId ? `url(https://img.youtube.com/vi/${videoId}/hqdefault.jpg)` : undefined,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                borderRadius: '12px',
+                overflow: 'hidden',
+                border: '1px solid rgba(255,255,255,0.08)',
+                position: 'relative',
+                aspectRatio: '16/9'
+              }}
+            >
+              {/* Thumbnail backdrop loading placeholder */}
+              {!playerReady && (
+                <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'rgba(0, 0, 0, 0.45)',
+                  backdropFilter: 'blur(2px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 1,
+                  pointerEvents: 'none'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.6rem',
+                    padding: '0.5rem 0.9rem',
+                    background: 'rgba(10, 15, 28, 0.85)',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    fontSize: '0.78rem',
+                    color: 'var(--text-secondary)'
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 1.2s linear infinite' }}>
+                      <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="8"></circle>
+                    </svg>
+                    <span>Loading preview player...</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Player mount container */}
+              <div
+                id="trimmer-yt-player-container"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  position: 'relative',
+                  zIndex: 2,
+                  opacity: playerReady ? 1 : 0,
+                  transition: 'opacity 0.28s ease'
+                }}
+              ></div>
               {/* Overlay Player Controls */}
               <div style={{
                 position: 'absolute',
@@ -1100,7 +1215,6 @@ export const ClipTrimmerModal: React.FC<ClipTrimmerModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              disabled={isDownloading}
               style={{
                 background: 'rgba(255, 255, 255, 0.06)',
                 border: '1px solid rgba(255, 255, 255, 0.14)',
@@ -1108,8 +1222,7 @@ export const ClipTrimmerModal: React.FC<ClipTrimmerModalProps> = ({
                 borderRadius: '8px',
                 padding: '0.48rem 0.95rem',
                 fontSize: '0.8rem',
-                cursor: isDownloading ? 'not-allowed' : 'pointer',
-                opacity: isDownloading ? 0.4 : 1,
+                cursor: 'pointer',
                 transition: 'var(--transition-smooth)'
               }}
             >
