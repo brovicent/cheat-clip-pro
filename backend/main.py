@@ -2459,34 +2459,86 @@ if DIST_DIR:
         raise HTTPException(status_code=404, detail="Frontend index.html not found")
 
 
-def _open_browser_when_ready(url: str, delay: float = 1.2):
-    def _target():
-        time.sleep(delay)
-        try:
-            import webbrowser
-            webbrowser.open(url)
-        except Exception as e:
-            logger.warning(f"Could not auto-open browser: {e}")
+def _run_desktop_window(host: str = "127.0.0.1", port: int = 8000):
+    """Launch Cheat Clip Pro in a dedicated native desktop window with full service lifecycle cleanup."""
+    import uvicorn
     import threading
-    t = threading.Thread(target=_target, daemon=True)
-    t.start()
+    import webview
+
+    # Configure uvicorn server in a background thread
+    config = uvicorn.Config(app, host=host, port=port, log_level="warning")
+    server = uvicorn.Server(config=config)
+
+    # Disable signal overrides so background thread runs smoothly
+    server.install_signal_handlers = lambda: None
+
+    def run_server():
+        server.run()
+
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
+
+    # Wait for server to be responsive
+    for _ in range(60):
+        if getattr(server, "started", False):
+            break
+        time.sleep(0.05)
+
+    app_url = f"http://{host}:{port}"
+    logger.info(f"Launching Cheat Clip Pro dedicated desktop window at {app_url}...")
+
+    # Create dedicated application window
+    window = webview.create_window(
+        title="Cheat Clip Pro",
+        url=app_url,
+        width=1340,
+        height=880,
+        min_size=(960, 640),
+        text_select=True,
+        zoomable=True,
+    )
+
+    # webview.start() blocks until the user closes the window (clicks 'X')
+    webview.start()
+
+    # User closed the window -> terminate all services immediately
+    logger.info("Desktop window closed by user. Terminating all services...")
+    server.should_exit = True
+    os._exit(0)
 
 
 if __name__ == "__main__":
     import uvicorn
     import argparse
+    import threading
 
     parser = argparse.ArgumentParser(description="Cheat Clip Pro")
     parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Host address to bind")
-    parser.add_argument("--open-browser", action="store_true", help="Auto open browser on start")
+    parser.add_argument("--cli", action="store_true", help="Run in CLI headless mode (no native window)")
+    parser.add_argument("--no-window", action="store_true", help="Run in CLI headless mode (no native window)")
+    parser.add_argument("--open-browser", action="store_true", help="Auto open web browser (CLI mode)")
     cli_args, _ = parser.parse_known_args()
 
-    # Automatically launch browser if packaged or requested via flag
-    if cli_args.open_browser or getattr(sys, "frozen", False):
-        _open_browser_when_ready(f"http://{cli_args.host}:{cli_args.port}")
-
-    uvicorn.run(app, host=cli_args.host, port=cli_args.port, log_level="info")
+    if cli_args.cli or cli_args.no_window:
+        if cli_args.open_browser:
+            import webbrowser
+            threading.Thread(
+                target=lambda: (time.sleep(1), webbrowser.open(f"http://{cli_args.host}:{cli_args.port}")),
+                daemon=True
+            ).start()
+        uvicorn.run(app, host=cli_args.host, port=cli_args.port, log_level="info")
+    else:
+        try:
+            _run_desktop_window(host=cli_args.host, port=cli_args.port)
+        except Exception as e:
+            logger.error(f"Failed to launch native window ({e}), falling back to browser: {e}")
+            import webbrowser
+            threading.Thread(
+                target=lambda: (time.sleep(1), webbrowser.open(f"http://{cli_args.host}:{cli_args.port}")),
+                daemon=True
+            ).start()
+            uvicorn.run(app, host=cli_args.host, port=cli_args.port, log_level="info")
 
 
 

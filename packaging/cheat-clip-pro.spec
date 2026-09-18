@@ -36,6 +36,10 @@ hidden_imports = [
     'dotenv',
     'python_multipart',
     'multipart',
+    'webview',
+    'clr',
+    'clr_loader',
+    'pythonnet',
 ]
 
 spec_dir = os.path.dirname(os.path.abspath(SPEC))
