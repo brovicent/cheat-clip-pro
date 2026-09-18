@@ -777,19 +777,21 @@ export default function App() {
   };
 
   const extractVideoId = (urlStr: string): string | null => {
+    if (!urlStr) return null;
+    const trimmed = urlStr.trim();
+    if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
+      return trimmed;
+    }
     const patterns = [
-      /(?:v=|\/v\/|embed\/|shorts\/|youtu\.be\/|\/embed\/|\/watch\?v=|\/watch\?.+&v=)([^#\&\?]{11})/,
-      /^(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?([^#\&\?]{11})/
+      /[?&]v=([a-zA-Z0-9_-]{11})/,
+      /(?:youtu\.be\/|(?:www\.|m\.)?youtube(?:-nocookie)?\.com\/(?:embed|v|shorts|live)\/)([a-zA-Z0-9_-]{11})/,
+      /(?:v=|\/v\/|embed\/|shorts\/|live\/|youtu\.be\/|\/embed\/|\/watch\?v=|\/watch\?.+&v=)([a-zA-Z0-9_-]{11})/
     ];
     for (const pattern of patterns) {
-      const match = urlStr.match(pattern);
-      if (match) {
+      const match = trimmed.match(pattern);
+      if (match && match[1]) {
         return match[1];
       }
-    }
-    const trimmed = urlStr.trim();
-    if (trimmed.length === 11) {
-      return trimmed;
     }
     return null;
   };

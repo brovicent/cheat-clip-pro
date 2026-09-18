@@ -290,19 +290,27 @@ def parse_manual_subtitles(content: str, default_duration: float = 0.0) -> List[
 
 
 def extract_video_id(url: str) -> Optional[str]:
-    """Extracts the 11-character YouTube video ID from various URL formats."""
-    # Handle shorts, embed, watch?v=, youtu.be, etc.
+    """Extracts the 11-character YouTube video ID from various URL formats including live streams, shorts, embed, watch?v=, youtu.be, etc."""
+    if not url:
+        return None
+    trimmed = url.strip()
+    # Direct 11-char ID
+    if re.match(r"^[a-zA-Z0-9_-]{11}$", trimmed):
+        return trimmed
+
     patterns = [
-        r"(?:v=|\/v\/|embed\/|shorts\/|youtu\.be\/|\/embed\/|\/watch\?v=|\/watch\?.+&v=)([^#\&\?]{11})",
-        r"^(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?([^#\&\?]{11})"
+        # Standard query parameter: ?v=VIDEO_ID or &v=VIDEO_ID
+        r"(?:[?&]v=)([a-zA-Z0-9_-]{11})",
+        # Path-based formats: /live/VIDEO_ID, /shorts/VIDEO_ID, /embed/VIDEO_ID, /v/VIDEO_ID, youtu.be/VIDEO_ID
+        r"(?:youtu\.be\/|(?:www\.|m\.)?youtube(?:-nocookie)?\.com\/(?:embed|v|shorts|live)\/)([a-zA-Z0-9_-]{11})",
+        # General fallback matching any path or query prefix
+        r"(?:v=|\/v\/|embed\/|shorts\/|live\/|youtu\.be\/|\/embed\/|\/watch\?v=|\/watch\?.+&v=)([a-zA-Z0-9_-]{11})",
     ]
     for pattern in patterns:
-        match = re.search(pattern, url)
+        match = re.search(pattern, trimmed)
         if match:
             return match.group(1)
-    # Simple length check fallback if the user just pasted the ID
-    if len(url.strip()) == 11:
-        return url.strip()
+
     return None
 
 def fetch_video_metadata(url: str):
@@ -662,6 +670,8 @@ async def analyze_video(request: AnalyzeRequest):
                 return
             video_id = "dQw4w9WgXcQ"
 
+        canonical_url = f"https://www.youtube.com/watch?v={video_id}"
+
         yield _sse({
             "step": 1,
             "step_progress": 30,
@@ -672,7 +682,7 @@ async def analyze_video(request: AnalyzeRequest):
         })
 
         try:
-            metadata = await asyncio.to_thread(fetch_video_metadata, request.url)
+            metadata = await asyncio.to_thread(fetch_video_metadata, canonical_url)
             title    = metadata["title"]
             duration = metadata["duration"]
             heatmap  = metadata.get("heatmap") or []
