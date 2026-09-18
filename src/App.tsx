@@ -3,6 +3,7 @@ import { HeatmapTimeline } from './components/HeatmapTimeline';
 import { LanguageSwitcher } from './components/LanguageSwitcher';
 import { ClipStudioSection } from './components/ClipStudioSection';
 import { CookiesModal } from './components/CookiesModal';
+import { ClipTrimmerModal } from './components/ClipTrimmerModal';
 import { useLanguage } from './locales';
 import type { AnalyzeResponse, ViralClip, RenderSettings, BatchRenderProgress } from './types';
 
@@ -39,6 +40,7 @@ export default function App() {
     status: 'idle' | 'downloading' | 'ready' | 'error';
     error?: string;
   }>>({});
+  const [trimmerClip, setTrimmerClip] = useState<ViralClip | null>(null);
 
   // AI model selection and custom focus prompt states
   const [selectedModel, setSelectedModel] = useState<string>(() => {
@@ -1191,8 +1193,24 @@ export default function App() {
     }
   };
 
-  const handleDownloadRawClip = async (clip: ViralClip, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleApplyAdjustedClipToResults = (adjustedClip: ViralClip) => {
+    if (result && result.clips && trimmerClip) {
+      setResult(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          clips: prev.clips.map(c =>
+            (c.start_time === trimmerClip.start_time && c.end_time === trimmerClip.end_time)
+              ? adjustedClip
+              : c
+          )
+        };
+      });
+    }
+  };
+
+  const handleDownloadRawClip = async (clip: ViralClip, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (!result || !result.video_id) return;
     const clipKey = `${clip.start_time}_${clip.end_time}`;
     if (clipDownloadStates[clipKey]?.status === 'downloading') return;
@@ -3342,7 +3360,10 @@ Transcript:
                                 fontWeight: 600,
                                 transition: 'var(--transition-smooth)'
                               }}
-                              onClick={(e) => handleDownloadRawClip(clip, e)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTrimmerClip(clip);
+                              }}
                               title={t.results.downloadRawClipTooltip}
                             >
                               {isDl ? (
@@ -3354,11 +3375,11 @@ Transcript:
                                 </>
                               ) : isReady ? (
                                 <>
-                                  <span>{t.results.downloadedRawClip}</span>
+                                  <span>✅ {t.results.downloadedRawClip}</span>
                                 </>
                               ) : (
                                 <>
-                                  <span>{t.results.downloadRawClip}</span>
+                                  <span>✂️ {t.results.downloadRawClip}</span>
                                 </>
                               )}
                             </button>
@@ -3453,6 +3474,39 @@ Transcript:
         isOpen={isCookiesModalOpen}
         onClose={() => setIsCookiesModalOpen(false)}
         onCookieStatusChange={setHasCookies}
+      />
+
+      {/* Clip Trimmer & Context Editor Modal */}
+      <ClipTrimmerModal
+        isOpen={Boolean(trimmerClip)}
+        clip={trimmerClip}
+        videoId={result?.video_id || ''}
+        videoTitle={result?.title}
+        videoDuration={result?.duration || 0}
+        transcript={result?.transcript}
+        isDownloading={trimmerClip ? clipDownloadStates[`${trimmerClip.start_time}_${trimmerClip.end_time}`]?.status === 'downloading' : false}
+        onClose={() => setTrimmerClip(null)}
+        onDownload={(adjustedClip) => {
+          handleApplyAdjustedClipToResults(adjustedClip);
+          handleDownloadRawClip(adjustedClip);
+          setTrimmerClip(null);
+        }}
+        onApplyToStudio={(adjustedClip) => {
+          handleApplyAdjustedClipToResults(adjustedClip);
+          setActiveClip(adjustedClip);
+          const clipKey = `${adjustedClip.start_time}_${adjustedClip.end_time}`;
+          if (!markedClips[clipKey]) {
+            toggleMarkedClip(clipKey);
+          }
+          setTrimmerClip(null);
+          setToastMessage("✂️ Clip context updated & loaded in Studio!");
+          setTimeout(() => {
+            const studioEl = document.getElementById('clip-studio-section');
+            if (studioEl) {
+              studioEl.scrollIntoView({ behavior: 'smooth' });
+            }
+          }, 100);
+        }}
       />
 
       {/* Global Fancy Clear Temp Confirmation Modal */}

@@ -4232,5 +4232,39 @@ label[for="manual-subtitle-file"]:hover {
   line-height: 1.35;
 }
 
+/* ==========================================================================
+   Clip Trimmer & Context Editor Modal Styles
+   ========================================================================== */
+.clip-trimmer-modal {
+  animation: trimmerModalScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes trimmerModalScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.clip-trimmer-modal button:hover {
+  filter: brightness(1.12);
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.clip-trimmer-modal button:active {
+  transform: scale(0.97);
+}
+
+@media (max-width: 768px) {
+  .clip-trimmer-modal {
+    max-height: 96vh !important;
+    padding: 0.5rem !important;
+  }
+}
+
 
 
