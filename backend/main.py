@@ -1542,16 +1542,25 @@ async def process_batch_rendering(batch_id: str, request: RenderBatchRequest):
             clip_status["progress_percent"] = 40
 
             display_title = None
+            base_title = (
+                clip.get("custom_title")
+                or clip.get("title_suggestion")
+                or clip.get("title")
+                or f"Clip {idx+1}"
+            ).strip()
+
             if settings.title_position != "none":
-                base_title = clip.get("title_suggestion") or clip.get("title") or ""
                 pfx = settings.title_prefix or ""
                 sfx = settings.title_suffix or ""
                 if pfx or sfx:
                     display_title = f"{pfx}{base_title}{sfx}".strip()
-                elif settings.title_text and settings.title_text.strip():
+                elif len(clips) == 1 and settings.title_text and settings.title_text.strip() and not (clip.get("custom_title") or clip.get("title_suggestion")):
                     display_title = settings.title_text.strip()
                 else:
                     display_title = base_title
+
+            # Ensure clip status reflects this clip's unique title
+            clip_status["title"] = display_title or base_title
 
             ass_path = None
             duration_sec = max(1.0, end_t - start_t)
@@ -1685,15 +1694,19 @@ async def start_batch_render(request: RenderBatchRequest, background_tasks: Back
 
     batch_id = f"batch_{int(time.time())}_{uuid.uuid4().hex[:6]}"
 
-    clips_status = [
-        {
+    pfx = (request.settings.title_prefix or "") if request.settings else ""
+    sfx = (request.settings.title_suffix or "") if request.settings else ""
+
+    clips_status = []
+    for idx, c in enumerate(request.clips):
+        base_t = (c.get("custom_title") or c.get("title_suggestion") or c.get("title") or f"Clip {idx+1}").strip()
+        full_t = f"{pfx}{base_t}{sfx}".strip() if (pfx or sfx) else base_t
+        clips_status.append({
             "clip_index": idx,
-            "title": c.get("title_suggestion") or c.get("title") or f"Clip {idx+1}",
+            "title": full_t,
             "status": "pending",
             "progress_percent": 0
-        }
-        for idx, c in enumerate(request.clips)
-    ]
+        })
 
     RENDER_BATCHES[batch_id] = {
         "batch_id": batch_id,

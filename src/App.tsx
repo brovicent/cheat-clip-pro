@@ -254,12 +254,18 @@ export default function App() {
         total_clips: settings.selectedClips.length,
         current_clip_index: 0,
         overall_status: 'running',
-        clips: settings.selectedClips.map((c, i) => ({
-          clip_index: i,
-          title: c.title_suggestion || c.title || `Clip #${i + 1}`,
-          status: 'pending',
-          progress_percent: 0,
-        }))
+        clips: settings.selectedClips.map((c, i) => {
+          const base = (c.title_suggestion || c.title || `Clip #${i + 1}`).trim();
+          const pfx = settings.titlePrefix || '';
+          const sfx = settings.titleSuffix || '';
+          const fullTitle = (pfx || sfx) ? `${pfx}${base}${sfx}`.trim() : base;
+          return {
+            clip_index: i,
+            title: fullTitle,
+            status: 'pending',
+            progress_percent: 0,
+          };
+        })
       });
 
       // Listen to SSE progress

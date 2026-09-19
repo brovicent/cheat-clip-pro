@@ -159,6 +159,7 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
   const [streamerPreset, setStreamerPreset] = useState<StreamerPreset>('none');
   const [titlePrefix, setTitlePrefix] = useState<string>('');
   const [titleSuffix, setTitleSuffix] = useState<string>('');
+  const [customClipTitles, setCustomClipTitles] = useState<Record<string, string>>({});
   const [titlePosition, setTitlePosition] = useState<TitlePosition>('auto');
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>('viral_pop');
   const [lastActiveCaptionStyle, setLastActiveCaptionStyle] = useState<CaptionStyle>('viral_pop');
@@ -1016,14 +1017,18 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
   const phoneWidth = 320;
   const phoneHeight = 569;
 
-  const baseClipHookTitle =
-    currentPreviewClip?.title_suggestion ||
-    currentPreviewClip?.title ||
-    'YOUR VIRAL HOOK TITLE';
+  const currentClipKey = currentPreviewClip ? `${currentPreviewClip.start_time}_${currentPreviewClip.end_time}` : '';
+  const currentCustomTitle = currentClipKey ? customClipTitles[currentClipKey] : undefined;
+
+  const baseClipHookTitle = (
+    currentCustomTitle !== undefined && currentCustomTitle.trim() !== ''
+      ? currentCustomTitle
+      : (currentPreviewClip?.title_suggestion || currentPreviewClip?.title || 'YOUR VIRAL HOOK TITLE')
+  );
 
   const activeTitle = `${titlePrefix}${baseClipHookTitle}${titleSuffix}`;
 
-  const sampleRawTitle = currentPreviewClip?.title_suggestion || currentPreviewClip?.title || 'Viral_Clip_1';
+  const sampleRawTitle = baseClipHookTitle;
   const sampleCleanTitle = sampleRawTitle.replace(/[\\/*?:"<>|]/g, '').trim() || 'Viral_Clip_1';
 
   const { formatted: formattedTitle, lineCount: titleLineCount } = formatTitleSmart(
@@ -1065,12 +1070,24 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
   };
 
   const handleLaunch = () => {
+    const enrichedSelectedClips = selectedClips.map(c => {
+      const key = `${c.start_time}_${c.end_time}`;
+      const custom = customClipTitles[key];
+      const effectiveTitle = (custom !== undefined && custom.trim()) ? custom.trim() : (c.title_suggestion || c.title);
+      return {
+        ...c,
+        title: effectiveTitle,
+        title_suggestion: effectiveTitle,
+        custom_title: effectiveTitle,
+      };
+    });
+
     onStartRender({
       aspectRatio,
       backgroundStyle,
       enableFaceTracking,
       streamerPreset,
-      titleText: activeTitle,
+      titleText: enrichedSelectedClips.length === 1 ? activeTitle : undefined,
       titlePrefix,
       titleSuffix,
       fileNamePrefix,
@@ -1086,7 +1103,7 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
       subtitleYPercent: safeSubtitleY,
       subtitlePositionMode,
       subtitleCenterYPercent: safeSubCenterY,
-      selectedClips,
+      selectedClips: enrichedSelectedClips,
       // Background Music
       bgmEnabled: bgmEnabled && !!bgmFilePath,
       bgmFilePath,
@@ -1141,11 +1158,16 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
               value={previewClipIndex}
               onChange={e => setPreviewClipIndex(Number(e.target.value))}
             >
-              {allClips.map((clip, idx) => (
-                <option key={idx} value={idx}>
-                  #{idx + 1}: {clip.title_suggestion || clip.title} ({Math.round(clip.end_time - clip.start_time)}s)
-                </option>
-              ))}
+              {allClips.map((clip, idx) => {
+                const clipKey = `${clip.start_time}_${clip.end_time}`;
+                const custom = customClipTitles[clipKey];
+                const displayT = (custom !== undefined && custom.trim()) ? custom.trim() : (clip.title_suggestion || clip.title);
+                return (
+                  <option key={idx} value={idx}>
+                    #{idx + 1}: {displayT} ({Math.round(clip.end_time - clip.start_time)}s)
+                  </option>
+                );
+              })}
             </select>
           </div>
         )}
@@ -1523,6 +1545,53 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
             {/* Prefix & Suffix Controls */}
             {titlePosition !== 'none' && (
               <>
+                {/* Active Clip Title Customizer */}
+                <div className="hook-clip-title-input-wrap" style={{ marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label className="hook-input-label" style={{ margin: 0, fontWeight: 600 }}>
+                      🏷️ {t.studio.clipTitleEditLabel || "Hook Title (Active Clip):"}
+                    </label>
+                    {currentCustomTitle !== undefined && currentCustomTitle.trim() !== '' && currentCustomTitle !== (currentPreviewClip?.title_suggestion || currentPreviewClip?.title) && (
+                      <button
+                        type="button"
+                        className="reset-title-link-btn"
+                        onClick={() => {
+                          setCustomClipTitles(prev => {
+                            const next = { ...prev };
+                            delete next[currentClipKey];
+                            return next;
+                          });
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--primary, #38bdf8)',
+                          fontSize: '0.74rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          padding: 0,
+                          textDecoration: 'underline'
+                        }}
+                      >
+                        ↺ {t.studio.resetToAiTitle || "Reset to AI Title"}
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    className="studio-text-input"
+                    placeholder={currentPreviewClip?.title_suggestion || currentPreviewClip?.title || t.studio.titlePlaceholder}
+                    value={currentCustomTitle !== undefined ? currentCustomTitle : (currentPreviewClip?.title_suggestion || currentPreviewClip?.title || '')}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setCustomClipTitles(prev => ({
+                        ...prev,
+                        [currentClipKey]: val
+                      }));
+                    }}
+                  />
+                </div>
+
                 <div className="hook-prefix-suffix-grid">
                   <div className="hook-input-col">
                     <label className="hook-input-label">{t.studio.titlePrefixLabel}</label>
@@ -1560,6 +1629,11 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                       {titleSuffix && <span className="sfx-highlight">{titleSuffix}</span>}
                     </span>
                   </div>
+                </div>
+
+                {/* Batch Helper Note */}
+                <div style={{ marginTop: '0.5rem', fontSize: '0.74rem', color: 'var(--text-muted, #94a3b8)', lineHeight: 1.4 }}>
+                  {t.studio.batchTitleNote}
                 </div>
 
                 {/* Title Duration Option */}
@@ -2630,7 +2704,11 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                     />
                     <div className="batch-clip-info">
                       <span className="batch-clip-title">
-                        {clip.title_suggestion || clip.title}
+                        {(() => {
+                          const clipKey = `${clip.start_time}_${clip.end_time}`;
+                          const custom = customClipTitles[clipKey];
+                          return (custom !== undefined && custom.trim()) ? custom.trim() : (clip.title_suggestion || clip.title);
+                        })()}
                       </span>
                       <span className="batch-clip-ts">
                         ⏱️ {Math.floor(clip.start_time / 60)}:{(clip.start_time % 60).toFixed(0).padStart(2, '0')} -{' '}
