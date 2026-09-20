@@ -98,6 +98,7 @@ export const id: Translations = {
     chooseSubtitleFile: "Silakan pilih atau seret berkas subtitle (.srt atau .txt).",
     analysisFailed: "Analisis Gagal",
     changeApiKeyAction: "Ganti API Key",
+    tryAgain: "Coba Lagi",
     getNewKeyLink: "Dapatkan key gratis di Google AI Studio ↗",
     noSubtitlesMsg: "Tidak dapat mengambil subtitle untuk video ini. Subtitle mungkin dinonaktifkan, atau video dibatasi usia/bersifat privat.",
     noSubtitlesTip: "Jika transkrip otomatis YouTube tidak dapat diambil, Anda dapat mengunduh subtitle secara manual melalui downsub.com, unggah berkas melalui opsi Unggah Subtitle Manual di atas, lalu coba analisis kembali.",

@@ -817,8 +817,8 @@ export default function App() {
     return null;
   };
 
-  const handleAnalyze = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAnalyze = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!url.trim()) return;
 
     // Require an API key before making any request
@@ -2456,15 +2456,76 @@ Transcript:
             <span style={{ fontSize: '1.5rem', color: '#ef4444', lineHeight: 1, marginTop: '2px' }}>⚠️</span>
             <div style={{ flex: 1 }}>
               <h4 style={{ color: '#ef4444', margin: 0, fontSize: '1rem', fontWeight: 700 }}>{t.errors.analysisFailed}</h4>
-              {error.toLowerCase().includes("no subtitles") ? (
-                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem', lineHeight: '1.5' }}>
-                  {t.errors.noSubtitlesMsg}
-                  <br /><br />
-                  💡 <strong>{t.form.subtitlesTipTitle}</strong> {t.errors.noSubtitlesTip}
-                </p>
-              ) : (
+              {/* Subtitle failure actions */}
+              {(error.toLowerCase().includes("subtitle") || error.toLowerCase().includes("transcript")) ? (
                 <>
-                  <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.35rem', lineHeight: '1.5' }}>{error}</p>
+                  <div style={{
+                    fontSize: '0.825rem',
+                    color: 'var(--text-secondary)',
+                    marginTop: '0.5rem',
+                    lineHeight: '1.6',
+                    whiteSpace: 'pre-wrap',
+                    background: 'rgba(0, 0, 0, 0.25)',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    fontFamily: 'monospace',
+                    maxHeight: '260px',
+                    overflowY: 'auto'
+                  }}>
+                    {error}
+                  </div>
+                  <div style={{ marginTop: '0.85rem', display: 'flex', flexWrap: 'wrap', gap: '0.65rem', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="glowing-btn"
+                      onClick={() => handleAnalyze()}
+                      disabled={loading}
+                      style={{
+                        padding: '0.45rem 1.15rem',
+                        fontSize: '0.85rem',
+                        borderRadius: '8px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.45rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <span className={loading ? "spinner-icon" : ""}>🔄</span>
+                      {t.errors.tryAgain || "Try Again"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSubtitlesSource('manual');
+                        const fileInput = document.getElementById('manual-subtitle-file');
+                        if (fileInput) fileInput.click();
+                      }}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        color: 'var(--text-primary)',
+                        borderRadius: '8px',
+                        padding: '0.45rem 0.85rem',
+                        fontSize: '0.8rem',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem'
+                      }}
+                    >
+                      📄 {t.form.uploadCustomSubtitles}
+                    </button>
+                  </div>
+                  <div style={{ marginTop: '0.75rem', padding: '0.6rem 0.85rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', borderLeft: '3px solid #f59e0b', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                    💡 <strong>Tip:</strong> {t.errors.noSubtitlesTip}
+                  </div>
+                </>
+              ) : (
+                /* Non-subtitle errors (e.g. Gemini API Key, quota, general errors) */
+                <>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.35rem', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{error}</p>
                   {(error.toLowerCase().includes("api key") || error.toLowerCase().includes("quota") || error.toLowerCase().includes("flash model") || error.toLowerCase().includes("aistudio") || error.toLowerCase().includes("rate limit")) && (
                     <div style={{ marginTop: '0.75rem', display: 'flex', flexWrap: 'wrap', gap: '0.6rem', alignItems: 'center' }}>
                       <button
@@ -2626,7 +2687,27 @@ Transcript:
                     />
                   </div>
                   {currentStep === 3 && (
-                    <span className="step-subtext">{t.loading.step3Subtext}</span>
+                    <div style={{ marginTop: '0.45rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        padding: '0.2rem 0.6rem',
+                        background: 'rgba(59, 130, 246, 0.12)',
+                        border: '1px solid rgba(59, 130, 246, 0.25)',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        color: '#60a5fa',
+                        fontWeight: 600,
+                        width: 'fit-content'
+                      }}>
+                        <span className="spinner-icon" style={{ fontSize: '0.75rem' }}>🔄</span>
+                        <span>{aiStage || t.loading.step3Label}</span>
+                      </div>
+                      <span className="step-subtext" style={{ color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                        {aiDetail || loadingDetails || t.loading.step3Subtext}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>

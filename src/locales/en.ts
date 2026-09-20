@@ -96,6 +96,7 @@ export const en = {
     chooseSubtitleFile: "Please choose or drag-and-drop a custom subtitle file (.srt or .txt).",
     analysisFailed: "Analysis Failed",
     changeApiKeyAction: "Change API Key",
+    tryAgain: "Try Again",
     getNewKeyLink: "Get free key at Google AI Studio ↗",
     noSubtitlesMsg: "No subtitles could be retrieved for this video. Subtitles might be disabled, or the video may be age-restricted or private.",
     noSubtitlesTip: "If auto-generated YouTube transcripts cannot be retrieved, you can download the subtitles manually using a tool like downsub.com, upload the file via the Upload Custom Subtitles option above, and try analyzing the video again.",
