@@ -94,6 +94,7 @@ export interface RenderSettings {
   fileNameSuffix?: string;
   titlePosition: TitlePosition;
   titleDuration?: TitleDurationOption;
+  titleFontSize?: FontSizeOption;
   subtitlesEnabled?: boolean;
   captionStyle: CaptionStyle;
   captionFont: CaptionFont;

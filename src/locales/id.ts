@@ -358,6 +358,7 @@ export const id: Translations = {
     styleNoneSub: "Tanpa Cetak Subtitle",
     fontFamily: "Pilihan Font:",
     fontSize: "Ukuran Font:",
+    titleFontSize: "Ukuran Teks Judul:",
     sizeSmall: "Kecil (36px)",
     sizeMedium: "Sedang (44px)",
     sizeBig: "Besar (54px)",

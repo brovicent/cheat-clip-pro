@@ -208,6 +208,7 @@ export default function App() {
             caption_style: settings.captionStyle,
             caption_font: settings.captionFont,
             font_size: settings.fontSize,
+            title_font_size: settings.titleFontSize || settings.fontSize || 'medium',
             text_case: settings.textCase,
             title_y_percent: settings.titleYPercent,
             subtitle_y_percent: settings.subtitleYPercent,

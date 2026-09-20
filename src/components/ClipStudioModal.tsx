@@ -44,6 +44,7 @@ export const ClipStudioModal: React.FC<ClipStudioModalProps> = ({
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>('viral_pop');
   const [captionFont, setCaptionFont] = useState<CaptionFont>('Outfit');
   const [fontSize, setFontSize] = useState<FontSizeOption>('medium');
+  const [titleFontSize, setTitleFontSize] = useState<FontSizeOption>('medium');
   const [textCase, setTextCase] = useState<TextCaseOption>('uppercase');
 
   if (!isOpen) return null;
@@ -66,6 +67,7 @@ export const ClipStudioModal: React.FC<ClipStudioModalProps> = ({
       streamerPreset,
       titleText,
       titlePosition,
+      titleFontSize,
       captionStyle,
       captionFont,
       fontSize,
@@ -273,6 +275,35 @@ export const ClipStudioModal: React.FC<ClipStudioModalProps> = ({
                   <option value="none">No Title Banner</option>
                 </select>
               </div>
+
+              {titlePosition !== 'none' && (
+                <div className="studio-sub-toggle" style={{ marginTop: '0.65rem' }}>
+                  <span className="sub-toggle-label">{t.studio.titleFontSize || "Title Text Size:"}</span>
+                  <div className="toggle-pill-group">
+                    <button
+                      type="button"
+                      className={`pill-btn ${titleFontSize === 'small' ? 'active' : ''}`}
+                      onClick={() => setTitleFontSize('small')}
+                    >
+                      {t.studio.sizeSmall}
+                    </button>
+                    <button
+                      type="button"
+                      className={`pill-btn ${titleFontSize === 'medium' ? 'active' : ''}`}
+                      onClick={() => setTitleFontSize('medium')}
+                    >
+                      {t.studio.sizeMedium}
+                    </button>
+                    <button
+                      type="button"
+                      className={`pill-btn ${titleFontSize === 'big' ? 'active' : ''}`}
+                      onClick={() => setTitleFontSize('big')}
+                    >
+                      {t.studio.sizeBig}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 4. Subtitle Style & Font */}
@@ -580,7 +611,7 @@ export const ClipStudioModal: React.FC<ClipStudioModalProps> = ({
                       className="wireframe-title-text"
                       style={{
                         fontFamily: captionFont,
-                        fontSize: fontSize === 'small' ? '0.68rem' : fontSize === 'big' ? '0.84rem' : '0.74rem',
+                        fontSize: (titleFontSize || fontSize) === 'small' ? '0.66rem' : (titleFontSize || fontSize) === 'big' ? '0.88rem' : '0.74rem',
                         lineHeight: 1.25,
                         whiteSpace: 'pre-line',
                         textAlign: 'center',

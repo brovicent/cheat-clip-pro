@@ -165,6 +165,7 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
   const [lastActiveCaptionStyle, setLastActiveCaptionStyle] = useState<CaptionStyle>('viral_pop');
   const [captionFont, setCaptionFont] = useState<CaptionFont>('Outfit');
   const [fontSize, setFontSize] = useState<FontSizeOption>('medium');
+  const [titleFontSize, setTitleFontSize] = useState<FontSizeOption>('medium');
   const [textCase, setTextCase] = useState<TextCaseOption>('uppercase');
   const [fileNamePrefix, setFileNamePrefix] = useState<string>('');
   const [fileNameSuffix, setFileNameSuffix] = useState<string>('');
@@ -872,7 +873,8 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
    */
   const formatTitleSmart = (
     rawText: string,
-    style: TextCaseOption
+    style: TextCaseOption,
+    sizePreset: FontSizeOption = titleFontSize
   ): { formatted: string; lineCount: number } => {
     const raw = rawText.trim();
     if (!raw) return { formatted: '', lineCount: 1 };
@@ -892,19 +894,13 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
     }
 
     const words = cased.split(/\s+/).filter(Boolean);
-    if (words.length <= 1 || cased.length <= 22) {
+    const maxSingleLen = sizePreset === 'small' ? 24 : sizePreset === 'big' ? 13 : 19;
+    if (words.length <= 1 || cased.length <= maxSingleLen) {
       return { formatted: cased, lineCount: 1 };
     }
 
     const totalLen = cased.length;
-    let targetLines = 2;
-    if (totalLen <= 38) {
-      targetLines = 2;
-    } else if (totalLen <= 62) {
-      targetLines = 3;
-    } else {
-      targetLines = Math.min(4, Math.max(3, Math.floor(totalLen / 20)));
-    }
+    const targetLines = Math.min(4, Math.max(2, Math.ceil(totalLen / maxSingleLen)));
 
     const targetPerLine = totalLen / targetLines;
     const lines: string[] = [];
@@ -1033,7 +1029,8 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
 
   const { formatted: formattedTitle, lineCount: titleLineCount } = formatTitleSmart(
     activeTitle,
-    textCase
+    textCase,
+    titleFontSize
   );
 
   const { maxTitleY, maxSubY } = getMaxPositions(aspectRatio, titleLineCount);
@@ -1094,6 +1091,7 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
       fileNameSuffix,
       titlePosition,
       titleDuration,
+      titleFontSize,
       subtitlesEnabled: captionStyle !== 'none',
       captionStyle,
       captionFont,
@@ -1660,6 +1658,34 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                       onClick={() => setTitleDuration('10s')}
                     >
                       {t.studio.duration10s}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Title Text Size Option */}
+                <div className="studio-sub-toggle" style={{ marginTop: '0.75rem' }}>
+                  <span className="sub-toggle-label">{t.studio.titleFontSize || "Title Text Size:"}</span>
+                  <div className="toggle-pill-group">
+                    <button
+                      type="button"
+                      className={`pill-btn ${titleFontSize === 'small' ? 'active' : ''}`}
+                      onClick={() => setTitleFontSize('small')}
+                    >
+                      {t.studio.sizeSmall}
+                    </button>
+                    <button
+                      type="button"
+                      className={`pill-btn ${titleFontSize === 'medium' ? 'active' : ''}`}
+                      onClick={() => setTitleFontSize('medium')}
+                    >
+                      {t.studio.sizeMedium}
+                    </button>
+                    <button
+                      type="button"
+                      className={`pill-btn ${titleFontSize === 'big' ? 'active' : ''}`}
+                      onClick={() => setTitleFontSize('big')}
+                    >
+                      {t.studio.sizeBig}
                     </button>
                   </div>
                 </div>
@@ -2919,18 +2945,16 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                       className="wireframe-title-text"
                       style={{
                         fontFamily: captionFont,
-                        fontSize:
-                          fontSize === 'small'
-                            ? titleLineCount >= 3
-                              ? '15.5px'
-                              : '17.5px'
-                            : fontSize === 'big'
-                            ? titleLineCount >= 3
-                              ? '22px'
-                              : '25.5px'
-                            : titleLineCount >= 3
-                            ? '18.5px'
-                            : '21px',
+                        fontSize: (() => {
+                          const effectiveSize = titleFontSize || fontSize;
+                          if (effectiveSize === 'small') {
+                            return titleLineCount >= 3 ? '14px' : '16.5px';
+                          }
+                          if (effectiveSize === 'big') {
+                            return titleLineCount >= 3 ? '22.5px' : '26px';
+                          }
+                          return titleLineCount >= 3 ? '18px' : '21px';
+                        })(),
                         lineHeight: titleLineCount >= 3 ? 1.10 : 1.08,
                         letterSpacing: '0.02em',
                         whiteSpace: 'pre-line',

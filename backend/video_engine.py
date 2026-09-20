@@ -7,6 +7,7 @@ import shutil
 import logging
 import subprocess
 import unicodedata
+import math
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
@@ -562,13 +563,8 @@ def wrap_title_smart(text: str, max_single_len: int = 22) -> Tuple[str, int]:
     if total_len <= max_single_len:
         return raw, 1
 
-    # Determine target line count based on character count: 2, 3, or up to 4
-    if total_len <= 38:
-        target_lines = 2
-    elif total_len <= 62:
-        target_lines = 3
-    else:
-        target_lines = min(4, max(3, total_len // 20))
+    # Determine target line count dynamically based on character count and max_single_len
+    target_lines = min(4, max(2, math.ceil(total_len / max_single_len)))
 
     target_per_line = total_len / target_lines
     lines = []
@@ -688,7 +684,8 @@ def render_title_overlay_png(
     title_position: str = "auto",
     title_y_percent: Optional[float] = None,
     canvas_w: int = 1080,
-    canvas_h: int = 1920
+    canvas_h: int = 1920,
+    title_font_size_preset: Optional[str] = None
 ) -> Optional[str]:
     """
     Renders the title with full-color emojis and bold styled typography into a transparent
@@ -697,22 +694,57 @@ def render_title_overlay_png(
     if not title_text or title_position == "none":
         return None
 
+    effective_title_preset = (title_font_size_preset or font_size_preset or "medium").lower()
+
+    if effective_title_preset == "small":
+        max_wrap_len = 24
+    elif effective_title_preset == "big":
+        max_wrap_len = 13
+    else:  # medium
+        max_wrap_len = 19
+
     # Format Title & Determine Line Count
     formatted_title, title_line_count = wrap_title_smart(
         apply_text_case(title_text, text_case),
-        max_single_len=22
+        max_single_len=max_wrap_len
     )
 
     if not formatted_title:
         return None
 
-    # Font Sizes based on preset, identical to ASS generator
-    if font_size_preset == "small":
-        title_font_size = 74 if title_line_count >= 3 else 84
-    elif font_size_preset == "big":
-        title_font_size = 106 if title_line_count >= 3 else 118
+    # Distinct, calibrated title font sizes based on preset
+    if effective_title_preset == "small":
+        title_font_size = 58 if title_line_count >= 3 else 68
+    elif effective_title_preset == "big":
+        title_font_size = 106 if title_line_count >= 3 else 124
     else:  # medium
-        title_font_size = 90 if title_line_count >= 3 else 100
+        title_font_size = 82 if title_line_count >= 3 else 94
+
+    # Create dummy draw to measure line widths and prevent edge overflow
+    temp_draw = ImageDraw.Draw(Image.new("RGBA", (canvas_w, canvas_h)))
+    text_font = get_font(font_name, title_font_size)
+    emoji_font = get_emoji_font(int(title_font_size * 0.90))
+
+    lines = [l.strip() for l in formatted_title.split("\\N") if l.strip()]
+    if not lines:
+        lines = [formatted_title]
+
+    # Measure maximum line width to prevent clipping off screen edges
+    max_line_w = 0
+    for line in lines:
+        seg_w = 0
+        for kind, chunk in split_text_and_emojis(line):
+            f = emoji_font if (kind == 'emoji' and emoji_font) else text_font
+            bbox = temp_draw.textbbox((0, 0), chunk, font=f)
+            seg_w += (bbox[2] - bbox[0])
+        max_line_w = max(max_line_w, seg_w)
+
+    max_allowed_w = canvas_w - 70  # 1010px safe width
+    if max_line_w > max_allowed_w and max_line_w > 0:
+        scale_factor = max_allowed_w / max_line_w
+        title_font_size = max(40, int(title_font_size * scale_factor))
+        text_font = get_font(font_name, title_font_size)
+        emoji_font = get_emoji_font(int(title_font_size * 0.90))
 
     # Content boundaries for aspect ratios (Canvas is 1080x1920)
     if target_aspect_ratio == "1:1":
@@ -752,13 +784,6 @@ def render_title_overlay_png(
     # Create transparent canvas
     img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-
-    text_font = get_font(font_name, title_font_size)
-    emoji_font = get_emoji_font(int(title_font_size * 0.90))
-
-    lines = [l.strip() for l in formatted_title.split("\\N") if l.strip()]
-    if not lines:
-        lines = [formatted_title]
 
     stroke_width = max(3, int(title_font_size * 0.055))
     shadow_offset = max(2, int(title_font_size * 0.025))
@@ -842,7 +867,8 @@ def generate_ass_file(
     subtitle_y_percent: Optional[float] = None,
     subtitle_position_mode: str = "bottom",
     subtitle_center_y_percent: float = 50.0,
-    skip_title: bool = False
+    skip_title: bool = False,
+    title_font_size_preset: Optional[str] = None
 ) -> str:
     """
     Generates an Advanced SubStation Alpha (.ass) subtitle and title file with karaoke / word-level animation.
@@ -851,26 +877,40 @@ def generate_ass_file(
     Keeps title and subtitle snug and close to video content (top & bottom) without touching.
     Supports subtitle_position_mode ('bottom' | 'center') with custom center Y position.
     """
+    effective_title_preset = (title_font_size_preset or font_size_preset or "medium").lower()
+
+    if effective_title_preset == "small":
+        max_wrap_len = 24
+    elif effective_title_preset == "big":
+        max_wrap_len = 13
+    else:  # medium
+        max_wrap_len = 19
+
     # 1. Format Title & Determine Line Count
     if title_text and title_position != "none":
         formatted_title, title_line_count = wrap_title_smart(
             apply_text_case(title_text, text_case),
-            max_single_len=22
+            max_single_len=max_wrap_len
         )
     else:
         formatted_title, title_line_count = "", 1
 
     # 2. Font Sizes based on preset, with automatic scale-down for 3+ line titles
-    # Exported video titles are punchier and larger with compact line spacing
+    # Subtitle font sizes based on font_size_preset
     if font_size_preset == "small":
         sub_font_size = 65
-        title_font_size = 74 if title_line_count >= 3 else 84
     elif font_size_preset == "big":
         sub_font_size = 94
-        title_font_size = 106 if title_line_count >= 3 else 118
     else:  # medium
         sub_font_size = 78
-        title_font_size = 90 if title_line_count >= 3 else 100
+
+    # Title font sizes based on effective_title_preset
+    if effective_title_preset == "small":
+        title_font_size = 58 if title_line_count >= 3 else 68
+    elif effective_title_preset == "big":
+        title_font_size = 106 if title_line_count >= 3 else 124
+    else:  # medium
+        title_font_size = 82 if title_line_count >= 3 else 94
 
     # 3. Content boundaries for aspect ratios (Canvas is 1080x1920)
     if target_aspect_ratio == "1:1":

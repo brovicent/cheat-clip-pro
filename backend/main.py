@@ -2193,6 +2193,7 @@ class RenderSettingsModel(BaseModel):
     caption_style: str = "viral_pop"
     caption_font: str = "Outfit"
     font_size: str = "medium"
+    title_font_size: Optional[str] = "medium"
     text_case: str = "uppercase"
     title_y_percent: Optional[float] = 14.0
     subtitle_y_percent: Optional[float] = 18.0
@@ -2309,7 +2310,8 @@ async def process_batch_rendering(batch_id: str, request: RenderBatchRequest):
                         font_size_preset=settings.font_size or "medium",
                         text_case=settings.text_case or "uppercase",
                         title_position=settings.title_position or "auto",
-                        title_y_percent=settings.title_y_percent if settings.title_y_percent is not None else 14.0
+                        title_y_percent=settings.title_y_percent if settings.title_y_percent is not None else 14.0,
+                        title_font_size_preset=settings.title_font_size or settings.font_size or "medium"
                     )
                     if rendered_overlay and os.path.exists(rendered_overlay):
                         title_overlay_path = rendered_overlay
@@ -2348,7 +2350,8 @@ async def process_batch_rendering(batch_id: str, request: RenderBatchRequest):
                     subtitle_y_percent=settings.subtitle_y_percent if settings.subtitle_y_percent is not None else 18.0,
                     subtitle_position_mode=settings.subtitle_position_mode if settings.subtitle_position_mode else "bottom",
                     subtitle_center_y_percent=settings.subtitle_center_y_percent if settings.subtitle_center_y_percent is not None else 50.0,
-                    skip_title=skip_ass_title
+                    skip_title=skip_ass_title,
+                    title_font_size_preset=settings.title_font_size or settings.font_size or "medium"
                 )
 
             # 3. Render Final Vertical MP4

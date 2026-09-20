@@ -356,6 +356,7 @@ export const en = {
     styleNoneSub: "Burn No Captions",
     fontFamily: "Font Family:",
     fontSize: "Font Size:",
+    titleFontSize: "Title Text Size:",
     sizeSmall: "Small (36px)",
     sizeMedium: "Medium (44px)",
     sizeBig: "Big (54px)",
