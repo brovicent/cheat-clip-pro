@@ -3224,14 +3224,36 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                   <span className="recent-list-title">{t.studio.recentFilesTitle}</span>
                   <div className="recent-items-scroll">
                     {batchProgress.clips.filter(c => c.status === 'completed').map((c, i) => {
-                      const rawBaseTitle = (c.title || `clip_${i + 1}`).replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${i + 1}`;
+                      let rawBaseTitle = (c.base_title || '').trim();
+                      if (!rawBaseTitle) {
+                        let t = (c.title || `clip_${i + 1}`).trim();
+                        if (titlePrefix && t.startsWith(titlePrefix)) {
+                          t = t.slice(titlePrefix.length);
+                        }
+                        if (titleSuffix && t.endsWith(titleSuffix)) {
+                          t = t.slice(0, t.length - titleSuffix.length);
+                        }
+                        rawBaseTitle = t.trim() || `clip_${i + 1}`;
+                      }
+                      rawBaseTitle = rawBaseTitle.replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${i + 1}`;
                       const fnPfx = (fileNamePrefix || '').replace(/[\\/*?:"<>|]/g, '');
                       const fnSfx = (fileNameSuffix || '').replace(/[\\/*?:"<>|]/g, '');
                       const cleanTitle = `${fnPfx}${rawBaseTitle}${fnSfx}`.trim() || rawBaseTitle;
                       let dupCount = 0;
                       const completedClips = batchProgress.clips.filter(x => x.status === 'completed');
                       for (let k = 0; k < i; k++) {
-                        const priorBase = (completedClips[k].title || `clip_${k + 1}`).replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${k + 1}`;
+                        let priorBase = (completedClips[k].base_title || '').trim();
+                        if (!priorBase) {
+                          let pt = (completedClips[k].title || `clip_${k + 1}`).trim();
+                          if (titlePrefix && pt.startsWith(titlePrefix)) {
+                            pt = pt.slice(titlePrefix.length);
+                          }
+                          if (titleSuffix && pt.endsWith(titleSuffix)) {
+                            pt = pt.slice(0, pt.length - titleSuffix.length);
+                          }
+                          priorBase = pt.trim() || `clip_${k + 1}`;
+                        }
+                        priorBase = priorBase.replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${k + 1}`;
                         const priorTitle = `${fnPfx}${priorBase}${fnSfx}`.trim() || priorBase;
                         if (priorTitle.toLowerCase() === cleanTitle.toLowerCase()) {
                           dupCount++;
@@ -3372,13 +3394,35 @@ export const ClipStudioSection: React.FC<ClipStudioSectionProps> = ({
                 {/* Render Items List */}
                 <div className="batch-render-items-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.6rem' }}>
                   {batchProgress.clips.map((clip, idx) => {
-                    const rawBaseTitle = (clip.title || `clip_${idx + 1}`).replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${idx + 1}`;
+                    let rawBaseTitle = (clip.base_title || '').trim();
+                    if (!rawBaseTitle) {
+                      let t = (clip.title || `clip_${idx + 1}`).trim();
+                      if (titlePrefix && t.startsWith(titlePrefix)) {
+                        t = t.slice(titlePrefix.length);
+                      }
+                      if (titleSuffix && t.endsWith(titleSuffix)) {
+                        t = t.slice(0, t.length - titleSuffix.length);
+                      }
+                      rawBaseTitle = t.trim() || `clip_${idx + 1}`;
+                    }
+                    rawBaseTitle = rawBaseTitle.replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${idx + 1}`;
                     const fnPfx = (fileNamePrefix || '').replace(/[\\/*?:"<>|]/g, '');
                     const fnSfx = (fileNameSuffix || '').replace(/[\\/*?:"<>|]/g, '');
                     const cleanTitle = `${fnPfx}${rawBaseTitle}${fnSfx}`.trim() || rawBaseTitle;
                     let dupCount = 0;
                     for (let i = 0; i < idx; i++) {
-                      const priorBase = (batchProgress.clips[i].title || `clip_${i + 1}`).replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${i + 1}`;
+                      let priorBase = (batchProgress.clips[i].base_title || '').trim();
+                      if (!priorBase) {
+                        let pt = (batchProgress.clips[i].title || `clip_${i + 1}`).trim();
+                        if (titlePrefix && pt.startsWith(titlePrefix)) {
+                          pt = pt.slice(titlePrefix.length);
+                        }
+                        if (titleSuffix && pt.endsWith(titleSuffix)) {
+                          pt = pt.slice(0, pt.length - titleSuffix.length);
+                        }
+                        priorBase = pt.trim() || `clip_${i + 1}`;
+                      }
+                      priorBase = priorBase.replace(/[\\/*?:"<>|]/g, '').trim() || `clip_${i + 1}`;
                       const priorTitle = `${fnPfx}${priorBase}${fnSfx}`.trim() || priorBase;
                       if (priorTitle.toLowerCase() === cleanTitle.toLowerCase()) {
                         dupCount++;

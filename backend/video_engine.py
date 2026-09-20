@@ -6,8 +6,10 @@ import time
 import shutil
 import logging
 import subprocess
+import unicodedata
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
+from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger("cheat-clip-pro.video-engine")
 
@@ -590,6 +592,240 @@ def wrap_title_smart(text: str, max_single_len: int = 22) -> Tuple[str, int]:
     return "\\N".join(lines), len(lines)
 
 
+def is_emoji_char(ch: str) -> bool:
+    """Checks if a character is an emoji, symbol, or emoji presentation modifier."""
+    code = ord(ch)
+    if (0x1F000 <= code <= 0x1FAFF or
+        0x2600 <= code <= 0x27BF or
+        0x2300 <= code <= 0x23FF or
+        0x2B50 <= code <= 0x2B55 or
+        code == 0x200D or
+        0xFE00 <= code <= 0xFE0F or
+        code == 0x20E3):
+        return True
+    cat = unicodedata.category(ch)
+    return cat in ('So', 'Sk')
+
+
+def has_emoji(text: Optional[str]) -> bool:
+    """Returns True if the string contains one or more emoji characters."""
+    if not text:
+        return False
+    return any(is_emoji_char(ch) for ch in text)
+
+
+def split_text_and_emojis(text: str) -> List[Tuple[str, str]]:
+    """Splits text into contiguous runs of ('emoji', text) and ('text', text)."""
+    segments = []
+    if not text:
+        return segments
+    current_type = None
+    current_buf = []
+    for ch in text:
+        t = 'emoji' if is_emoji_char(ch) else 'text'
+        if current_type is None:
+            current_type = t
+            current_buf.append(ch)
+        elif t == current_type:
+            current_buf.append(ch)
+        else:
+            segments.append((current_type, "".join(current_buf)))
+            current_type = t
+            current_buf = [ch]
+    if current_buf:
+        segments.append((current_type, "".join(current_buf)))
+    return segments
+
+
+def get_font(font_name: str, size: int) -> ImageFont.FreeTypeFont:
+    """Resolves font with fallback to Montserrat or default font."""
+    fonts_dir = str(FONTS_DIR)
+    for ext in [".ttf", ".otf", ""]:
+        p = os.path.join(fonts_dir, f"{font_name}{ext}")
+        if os.path.exists(p):
+            try:
+                return ImageFont.truetype(p, size)
+            except Exception:
+                pass
+    p_fallback = os.path.join(fonts_dir, "Montserrat.ttf")
+    if os.path.exists(p_fallback):
+        try:
+            return ImageFont.truetype(p_fallback, size)
+        except Exception:
+            pass
+    return ImageFont.load_default()
+
+
+def get_emoji_font(size: int) -> Optional[ImageFont.FreeTypeFont]:
+    """Finds and loads a color emoji font (seguiemj.ttf, NotoColorEmoji.ttf, etc.)."""
+    env_emoji = os.environ.get("EMOJI_FONT_PATH", "").strip()
+    candidates = [
+        env_emoji if env_emoji else None,
+        str(FONTS_DIR / "seguiemj.ttf"),
+        str(FONTS_DIR / "NotoColorEmoji.ttf"),
+        "C:/Windows/Fonts/seguiemj.ttf",
+        "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+        "/usr/share/fonts/google-noto-color-emoji/NotoColorEmoji.ttf",
+        "/usr/share/fonts/opentype/noto/NotoColorEmoji.otf",
+        "/usr/share/fonts/truetype/ancient-scripts/Symbola_hint.ttf",
+    ]
+    for c in candidates:
+        if c and os.path.exists(c):
+            try:
+                return ImageFont.truetype(c, size)
+            except Exception as e:
+                logger.debug(f"Could not load emoji font {c}: {e}")
+    return None
+
+
+def render_title_overlay_png(
+    title_text: str,
+    output_png_path: str,
+    font_name: str = "Montserrat",
+    target_aspect_ratio: str = "9:16",
+    font_size_preset: str = "medium",
+    text_case: str = "uppercase",
+    title_position: str = "auto",
+    title_y_percent: Optional[float] = None,
+    canvas_w: int = 1080,
+    canvas_h: int = 1920
+) -> Optional[str]:
+    """
+    Renders the title with full-color emojis and bold styled typography into a transparent
+    1080x1920 PNG overlay for seamless FFmpeg compositing.
+    """
+    if not title_text or title_position == "none":
+        return None
+
+    # Format Title & Determine Line Count
+    formatted_title, title_line_count = wrap_title_smart(
+        apply_text_case(title_text, text_case),
+        max_single_len=22
+    )
+
+    if not formatted_title:
+        return None
+
+    # Font Sizes based on preset, identical to ASS generator
+    if font_size_preset == "small":
+        title_font_size = 74 if title_line_count >= 3 else 84
+    elif font_size_preset == "big":
+        title_font_size = 106 if title_line_count >= 3 else 118
+    else:  # medium
+        title_font_size = 90 if title_line_count >= 3 else 100
+
+    # Content boundaries for aspect ratios (Canvas is 1080x1920)
+    if target_aspect_ratio == "1:1":
+        content_top = 420
+        content_bot = 1500
+    elif target_aspect_ratio == "4:3":
+        content_top = 555
+        content_bot = 1365
+    elif target_aspect_ratio == "16:9":
+        content_top = 656
+        content_bot = 1264
+    else:
+        content_top = 0
+        content_bot = 1920
+
+    line_step = int(title_font_size * 0.86)
+    est_title_h = int(title_line_count * line_step)
+
+    # Title Positioning: identical to ASS calculations
+    if target_aspect_ratio != "9:16":
+        default_title_y = max(20, content_top - est_title_h - 15)
+        if title_y_percent is not None:
+            title_y = int(1920 * (title_y_percent / 100.0))
+        else:
+            title_y = default_title_y
+        max_safe_title_y = max(15, content_top - est_title_h - 5)
+        title_y = min(title_y, max_safe_title_y)
+    else:
+        if title_line_count >= 3 and (title_y_percent is None or title_y_percent == 14.0):
+            effective_title_y_pct = 10.5
+        elif title_line_count == 2 and (title_y_percent is None or title_y_percent == 14.0):
+            effective_title_y_pct = 13.5
+        else:
+            effective_title_y_pct = title_y_percent if title_y_percent is not None else 13.5
+        title_y = max(20, min(1800, int(1920 * (effective_title_y_pct / 100.0))))
+
+    # Create transparent canvas
+    img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    text_font = get_font(font_name, title_font_size)
+    emoji_font = get_emoji_font(int(title_font_size * 0.90))
+
+    lines = [l.strip() for l in formatted_title.split("\\N") if l.strip()]
+    if not lines:
+        lines = [formatted_title]
+
+    stroke_width = max(3, int(title_font_size * 0.055))
+    shadow_offset = max(2, int(title_font_size * 0.025))
+
+    # Reference baseline height for uppercase text
+    t_ref_bbox = draw.textbbox((0, 0), "HGY", font=text_font)
+    t_ref_mid = (t_ref_bbox[1] + t_ref_bbox[3]) / 2.0
+
+    for line_idx, line in enumerate(lines):
+        line_top = title_y + (line_idx * line_step)
+        segments = split_text_and_emojis(line)
+
+        # 1. Measure total width
+        segment_widths = []
+        for kind, chunk in segments:
+            f = emoji_font if (kind == 'emoji' and emoji_font) else text_font
+            bbox = draw.textbbox((0, 0), chunk, font=f)
+            w = bbox[2] - bbox[0]
+            segment_widths.append(w)
+
+        total_line_w = sum(segment_widths)
+        start_x = (canvas_w - total_line_w) / 2.0
+
+        # 2. Draw shadow first (for text segments)
+        cur_x = start_x
+        for (kind, chunk), w in zip(segments, segment_widths):
+            if kind != 'emoji':
+                draw.text(
+                    (cur_x + shadow_offset, line_top + shadow_offset),
+                    chunk,
+                    font=text_font,
+                    fill=(0, 0, 0, 160),
+                    stroke_width=stroke_width,
+                    stroke_fill=(0, 0, 0, 160)
+                )
+            cur_x += w
+
+        # 3. Draw outline / stroke and color emojis
+        cur_x = start_x
+        for (kind, chunk), w in zip(segments, segment_widths):
+            if kind == 'emoji' and emoji_font:
+                e_bbox = draw.textbbox((0, 0), chunk, font=emoji_font)
+                e_mid = (e_bbox[1] + e_bbox[3]) / 2.0
+                offset_y = t_ref_mid - e_mid
+
+                draw.text(
+                    (cur_x, line_top + offset_y),
+                    chunk,
+                    font=emoji_font,
+                    embedded_color=True
+                )
+            else:
+                draw.text(
+                    (cur_x, line_top),
+                    chunk,
+                    font=text_font,
+                    fill=(255, 255, 255, 255),
+                    stroke_width=stroke_width,
+                    stroke_fill=(0, 0, 0, 255)
+                )
+            cur_x += w
+
+    os.makedirs(os.path.dirname(output_png_path), exist_ok=True)
+    img.save(output_png_path, "PNG")
+    return output_png_path
+
+
 def generate_ass_file(
     words: List[Dict[str, Any]],
     style_preset: str,
@@ -605,7 +841,8 @@ def generate_ass_file(
     title_y_percent: Optional[float] = None,
     subtitle_y_percent: Optional[float] = None,
     subtitle_position_mode: str = "bottom",
-    subtitle_center_y_percent: float = 50.0
+    subtitle_center_y_percent: float = 50.0,
+    skip_title: bool = False
 ) -> str:
     """
     Generates an Advanced SubStation Alpha (.ass) subtitle and title file with karaoke / word-level animation.
@@ -773,7 +1010,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     events = []
 
     # 3. Add Title Event with selectable visibility duration (5s, 10s, or entire clip)
-    if formatted_title and title_position != "none":
+    # If skip_title is True or title contains emojis, title is composited via PNG overlay with full color
+    if formatted_title and title_position != "none" and not skip_title and not has_emoji(title_text):
         if title_duration == "5s":
             t_end_sec = min(5.0, duration_seconds)
         elif title_duration == "10s":
@@ -1278,6 +1516,9 @@ def render_clip_to_mp4(
     title_position: str = "auto",
     ass_subtitles_path: Optional[str] = None,
     clip_duration: float = 30.0,
+    # Title Overlay (for full-color emojis and styling)
+    title_overlay_path: Optional[str] = None,
+    title_duration: str = "entire",
     # Watermark options
     watermark_enabled: bool = False,
     watermark_type: str = "image",
@@ -1314,7 +1555,7 @@ def render_clip_to_mp4(
         background_style=background_style,
         face_center_ratio=float(face_box.get("cx", 0.5)),
         streamer_preset=streamer_preset,
-        title_text=title_text,
+        title_text=title_text if not (title_overlay_path and os.path.exists(title_overlay_path)) else None,
         title_position=title_position,
         ass_subtitles_path=ass_subtitles_path,
         face_box=face_box
@@ -1323,8 +1564,28 @@ def render_clip_to_mp4(
     filter_chains = [filter_complex]
     extra_input_args = []
     input_idx_counter = 1
+    dur = max(1.0, float(clip_duration))
 
-    # 1. Apply Watermark Overlay
+    # 1. Apply Title Overlay (Full-Color Emojis & Titles)
+    if title_overlay_path and os.path.exists(title_overlay_path):
+        t_idx = input_idx_counter
+        input_idx_counter += 1
+        extra_input_args.extend(["-i", str(title_overlay_path)])
+
+        if title_duration == "5s":
+            t_end_sec = min(5.0, dur)
+            enable_expr = f":enable='between(t,0,{t_end_sec:.2f})'"
+        elif title_duration == "10s":
+            t_end_sec = min(10.0, dur)
+            enable_expr = f":enable='between(t,0,{t_end_sec:.2f})'"
+        else:
+            enable_expr = ""
+
+        overlay_title_cmd = f"{out_video_map}[{t_idx}:v]overlay=0:0{enable_expr}[v_with_title_overlay]"
+        filter_chains.append(overlay_title_cmd)
+        out_video_map = "[v_with_title_overlay]"
+
+    # 2. Apply Watermark Overlay
     if watermark_enabled and float(watermark_size) > 0:
         wm_opacity = max(0.05, min(1.0, float(watermark_opacity)))
         wm_x_ratio = max(-1.0, min(2.0, float(watermark_x_percent) / 100.0))

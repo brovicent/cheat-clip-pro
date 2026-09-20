@@ -58,7 +58,9 @@ try:
         detect_speaker_face_box,
         detect_hardware_support,
         ACTIVE_ENCODER_NAME,
-        ACTIVE_ENCODER_ARGS
+        ACTIVE_ENCODER_ARGS,
+        has_emoji,
+        render_title_overlay_png
     )
 except ImportError:
     from video_engine import (
@@ -74,7 +76,9 @@ except ImportError:
         detect_speaker_face_box,
         detect_hardware_support,
         ACTIVE_ENCODER_NAME,
-        ACTIVE_ENCODER_ARGS
+        ACTIVE_ENCODER_ARGS,
+        has_emoji,
+        render_title_overlay_png
     )
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -2282,12 +2286,40 @@ async def process_batch_rendering(batch_id: str, request: RenderBatchRequest):
                 else:
                     display_title = base_title
 
-            # Ensure clip status reflects this clip's unique title
+            # Ensure clip status reflects this clip's unique title and base_title
             clip_status["title"] = display_title or base_title
+            clip_status["base_title"] = base_title
 
             ass_path = None
+            title_overlay_path = None
+            skip_ass_title = False
             duration_sec = max(1.0, end_t - start_t)
-            if settings.caption_style != "none" or (display_title and settings.title_position != "none"):
+
+            # Check if title has emoji -> render transparent color emoji PNG overlay
+            if display_title and settings.title_position != "none" and has_emoji(display_title):
+                title_png_filename = f"{batch_id}_clip_{idx}_title.png"
+                title_png_path = str(TEMP_DIR / title_png_filename)
+                try:
+                    rendered_overlay = await asyncio.to_thread(
+                        render_title_overlay_png,
+                        title_text=display_title,
+                        output_png_path=title_png_path,
+                        font_name=settings.caption_font or "Montserrat",
+                        target_aspect_ratio=settings.aspect_ratio or "9:16",
+                        font_size_preset=settings.font_size or "medium",
+                        text_case=settings.text_case or "uppercase",
+                        title_position=settings.title_position or "auto",
+                        title_y_percent=settings.title_y_percent if settings.title_y_percent is not None else 14.0
+                    )
+                    if rendered_overlay and os.path.exists(rendered_overlay):
+                        title_overlay_path = rendered_overlay
+                        skip_ass_title = True
+                        logger.info(f"Rendered full-color emoji title overlay: {title_overlay_path}")
+                except Exception as ex:
+                    logger.warning(f"Could not render color emoji title overlay: {ex}")
+                    skip_ass_title = False
+
+            if settings.caption_style != "none" or (display_title and settings.title_position != "none" and not skip_ass_title):
                 words = []
                 if settings.caption_style != "none":
                     words = await asyncio.to_thread(
@@ -2308,14 +2340,15 @@ async def process_batch_rendering(batch_id: str, request: RenderBatchRequest):
                     target_aspect_ratio=settings.aspect_ratio,
                     font_size_preset=settings.font_size,
                     text_case=settings.text_case,
-                    title_text=display_title,
+                    title_text=display_title if not skip_ass_title else None,
                     title_position=settings.title_position,
                     title_duration=settings.title_duration if settings.title_duration else "entire",
                     duration_seconds=duration_sec,
                     title_y_percent=settings.title_y_percent if settings.title_y_percent is not None else 14.0,
                     subtitle_y_percent=settings.subtitle_y_percent if settings.subtitle_y_percent is not None else 18.0,
                     subtitle_position_mode=settings.subtitle_position_mode if settings.subtitle_position_mode else "bottom",
-                    subtitle_center_y_percent=settings.subtitle_center_y_percent if settings.subtitle_center_y_percent is not None else 50.0
+                    subtitle_center_y_percent=settings.subtitle_center_y_percent if settings.subtitle_center_y_percent is not None else 50.0,
+                    skip_title=skip_ass_title
                 )
 
             # 3. Render Final Vertical MP4
@@ -2333,10 +2366,12 @@ async def process_batch_rendering(batch_id: str, request: RenderBatchRequest):
                 background_style=settings.background_style,
                 enable_face_tracking=settings.enable_face_tracking,
                 streamer_preset=settings.streamer_preset,
-                title_text=display_title,
+                title_text=display_title if not skip_ass_title else None,
                 title_position=settings.title_position,
                 ass_subtitles_path=ass_path,
                 clip_duration=duration_sec,
+                title_overlay_path=title_overlay_path,
+                title_duration=settings.title_duration if settings.title_duration else "entire",
                 watermark_enabled=bool(settings.watermark_enabled),
                 watermark_type=settings.watermark_type or "image",
                 watermark_image_path=settings.watermark_file_path,
@@ -2381,7 +2416,7 @@ async def process_batch_rendering(batch_id: str, request: RenderBatchRequest):
                     fname = c["download_url"].split("/")[-1]
                     fpath = EXPORTS_DIR / fname
                     if fpath.exists():
-                        raw_title = (c.get("title") or "").strip()
+                        raw_title = (c.get("base_title") or c.get("title") or "").strip()
                         clean_title = re.sub(r'[\\/*?:"<>|]', "", raw_title) or f"clip_{c.get('clip_index', 1)}"
                         fn_pfx = re.sub(r'[\\/*?:"<>|]', "", settings.file_name_prefix or "")
                         fn_sfx = re.sub(r'[\\/*?:"<>|]', "", settings.file_name_suffix or "")
@@ -2427,6 +2462,7 @@ async def start_batch_render(request: RenderBatchRequest, background_tasks: Back
         clips_status.append({
             "clip_index": idx,
             "title": full_t,
+            "base_title": base_t,
             "status": "pending",
             "progress_percent": 0
         })

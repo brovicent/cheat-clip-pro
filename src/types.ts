@@ -134,6 +134,7 @@ export interface RenderSettings {
 export interface RenderClipStatus {
   clip_index: number;
   title: string;
+  base_title?: string;
   status: 'pending' | 'downloading' | 'transcribing' | 'tracking' | 'rendering' | 'completed' | 'error';
   progress_percent: number;
   download_url?: string;
